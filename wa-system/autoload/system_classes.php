@@ -153,7 +153,7 @@ return array(
     'waArrayObject'                     => 'util/waArrayObject.class.php',
     'waArrayObjectDiff'                 => 'util/waArrayObjectDiff.class.php',
     'waLazyDisplay'                     => 'util/waLazyDisplay.class.php',
-    'waCSV'                             => 'util/waCSV.class.php',
+    //'waCSV'                             => 'util/waCSV.class.php', //Deprecated. TODO: Fix crmHelper::chooseLegalCsvSeparator
     'waHtmlControl'                     => 'util/waHtmlControl.class.php',
     'waString'                          => 'util/waString.class.php',
     'waUtils'                           => 'util/waUtils.class.php',

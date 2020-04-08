@@ -158,7 +158,7 @@ class waSignupAction extends waViewAction
 
         if ($user_info) {
             if ($this->sendLink(new waContact($user_info['id']))) {
-                echo _ws('Confirmation link has been resent');
+                echo _ws('Confirmation link has been resent.');
             } else {
                 echo _ws('Error');
             }
@@ -170,6 +170,7 @@ class waSignupAction extends waViewAction
     }
 
     /**
+     * Action for email confirmation
      * @param $confirm_hash
      * @throws waException
      */
@@ -341,6 +342,8 @@ class waSignupAction extends waViewAction
     {
         if (!waRequest::param('secure')) {
             $referer = waRequest::server('HTTP_REFERER');
+            $referer = is_string($referer) ? $referer : '';
+
             $root_url = wa()->getRootUrl(true);
             if ($root_url != substr($referer, 0, strlen($root_url))) {
                 $this->getStorage()->del('auth_referer');
@@ -356,6 +359,9 @@ class waSignupAction extends waViewAction
             );
 
             foreach ($ignore_urls as $ignore_url) {
+
+                $ignore_url = is_string($ignore_url) ? $ignore_url : '';
+
                 // if referer "looks like" ignorable url
                 if (strpos($referer, $ignore_url) !== false || strpos($ignore_url, $referer) !== false) {
                     // Suck url not consider as referer
@@ -390,12 +396,15 @@ class waSignupAction extends waViewAction
      *
      * @param null|string $priority waVerificationChannelModel::TYPE_* const
      * @return array(0 => <status>, 1 => <details>)
+     * @throws waException
      */
     protected function sendSignupNotify($addresses, $priority = null)
     {
         if (!$this->auth_config->getSignUpNotify()) {
             return array(false, array());
         }
+
+        $generated_password_auth_type = $this->auth_config->getAuthType() === waAuthConfig::AUTH_TYPE_GENERATE_PASSWORD;
 
         $channels = $this->auth_config->getVerificationChannelInstances($priority);
 
@@ -404,32 +413,86 @@ class waSignupAction extends waViewAction
         $used_address = null;
 
         foreach ($channels as $channel) {
+
+            $address = null;
+
+            // options for send method
+            $options = array(
+                'site_url' => $this->auth_config->getSiteUrl(),
+                'site_name' => $this->auth_config->getSiteName(),
+                'login_url' => $this->auth_config->getLoginUrl(array(), true)
+            );
+            if ($this->auth_config->getAuthType() === waAuthConfig::AUTH_TYPE_GENERATE_PASSWORD) {
+                $options['password'] = $this->getGeneratePassword();
+            }
+
             if ($channel->isEmail() && !empty($addresses['email'])) {
                 $address = $addresses['email'];
-            } elseif ($channel->isSMS() && !empty($addresses['phone'])) {
-                $address = $addresses['phone'];
-            } else {
-                $address = null;
-            }
-            if ($address) {
-                $options = array(
-                    'site_url' => $this->auth_config->getSiteUrl(),
-                    'site_name' => $this->auth_config->getSiteName(),
-                    'login_url' => $this->auth_config->getLoginUrl(array(), true)
-                );
-                if ($this->auth_config->getAuthType() === waAuthConfig::AUTH_TYPE_GENERATE_PASSWORD) {
-                    $options['password'] = $this->getGeneratePassword();
-                }
                 $sent = $channel->sendSignUpSuccessNotification($address, $options);
-                if ($sent) {
-                    $used_address = $address;
-                    $used_channel_type = $channel->getType();
-                    break;
+            } elseif ($channel->isSMS() && !empty($addresses['phone'])) {
+
+                $phone = $addresses['phone'];
+                $is_international = substr($phone, 0, 1) === '+';
+
+                $sent = $channel->sendSignUpSuccessNotification($phone, $options);
+
+                // Not sent, maybe because of sms adapter not work correct with not international phones
+                if (!$sent && !$is_international) {
+                    // If not international phone number - transform 8 to code (country prefix)
+                    $transform_result = $this->auth_config->transformPhone($phone);
+                    if ($transform_result['status']) {
+                        $phone = $transform_result['phone'];
+                        $sent = $channel->sendSignUpSuccessNotification($phone, $options);
+                    }
+                }
+
+                $address = $phone;
+            }
+
+            if (!$address) {
+                continue;
+            }
+
+            // successful send
+            if ($sent) {
+                $used_address = $address;
+                $used_channel_type = $channel->getType();
+                break;
+            }
+
+            // print diagnostic only if generated password not sent
+            if ($generated_password_auth_type) {
+                if ($channel->isEmail()) {
+                    $diagnostic_message = "Couldn't send email message with generated password. Check email settings.\n%s";
+                    $this->logError(
+                        sprintf($diagnostic_message, $channel->getDiagnostic()),
+                        array('line' => __LINE__, 'file' => __FILE__)
+                    );
+                } elseif ($channel->isSMS()) {
+                    $diagnostic_message = "Couldn't send SMS with generated password. Explore sms.log for details.\n%s";
+                    $this->logError(
+                        sprintf($diagnostic_message, $channel->getDiagnostic()),
+                        array('line' => __LINE__, 'file' => __FILE__)
+                    );
+                } else {
+                    $diagnostic_message = "Couldn't send message with generated password.\n%s";
+                    $this->logError(
+                        sprintf($diagnostic_message, $channel->getDiagnostic()),
+                        array('line' => __LINE__, 'file' => __FILE__)
+                    );
                 }
             }
         }
 
         if (!$sent) {
+            // print diagnostic only if generated password not sent
+            if ($generated_password_auth_type) {
+                $this->logError(
+                    sprintf("Couldn't send message with generated password.\nLooks like there is no any working channel in system. Check auth settings for this domain %s",
+                        $this->auth_config->getDomain()),
+                    array('line' => __LINE__, 'file' => __FILE__)
+                );
+            }
             return array(false, array());
         }
 
@@ -497,8 +560,19 @@ class waSignupAction extends waViewAction
 
         if (!empty($details['confirmation_code_sent'])) {
 
+            if (!empty($details['phone_transformed'])) {
+                $this->markPhoneWasTransformedForSMS($details['phone_transformed']);
+            }
+
             $msg = _ws('An SMS message has been sent to phone number <strong>%s</strong> for you to confirm signup.');
-            $msg = sprintf($msg, waContactPhoneField::cleanPhoneNumber($data['phone']));
+
+            $phone_formatted = waContactPhoneField::cleanPhoneNumber($data['phone']);
+            $phone_field = waContactFields::get('phone');
+            if ($phone_field) {
+                $phone_formatted = $phone_field->format($phone_formatted, 'value');
+            }
+
+            $msg = sprintf($msg, $phone_formatted);
 
             $this->assign(array(
                 'code_sent' => true,
@@ -546,6 +620,7 @@ class waSignupAction extends waViewAction
             $priority = waVerificationChannelModel::TYPE_SMS;
         }
 
+        // diagnostic already printed inside
         list($notify_sent, $notify_details) = $this->sendSignupNotify($data, $priority);
 
         // IMPORTANT detail
@@ -563,7 +638,13 @@ class waSignupAction extends waViewAction
         // If notify hasn't sent - it is bad, but not fatal
         // But if client can't get password - need show errors to client
         if (!$notify_sent && $generated_password_auth_type) {
-            $this->assign('errors', array('signup' => _ws('Signup has failed, password was not sent.')));
+            $this->assign('errors', array('signup' => _ws('Password has not been sent. Please contact your administrator.')));
+
+            $this->logError(
+                sprintf("Contact is singed up but send notification about signup failed and password not sent. See above detailed messages"),
+                array('line' => __LINE__, 'file' => __FILE__)
+            );
+
             return;
         }
 
@@ -585,6 +666,7 @@ class waSignupAction extends waViewAction
     /**
      * Central action - workup signing up process itself
      * @param array $data
+     * @throws waException
      */
     protected function executeSignupAction($data)
     {
@@ -682,7 +764,7 @@ class waSignupAction extends waViewAction
      */
     protected function getData($fields = null)
     {
-        $data = $this->getRequest()->post($this->namespace);
+        $data = $this->getRequest()->post($this->namespace, array(), waRequest::TYPE_ARRAY_TRIM);
         $data = is_array($data) ? $data : array();
 
         // filter off some fields
@@ -723,6 +805,18 @@ class waSignupAction extends waViewAction
         }
     }
 
+    /**
+     *
+     * Main validation method - validate all data
+     * Input data might be changed
+     *
+     * @param array &$data input data, passed by link. Might be changed
+     * @return array Errors. For each invalid field array of errors
+     *   Format:
+     *     <field_id> => array <errors>
+     *
+     * @throws waException
+     */
     protected function validate(&$data)
     {
         $data = is_array($data) ? $data : array();
@@ -816,13 +910,11 @@ class waSignupAction extends waViewAction
             return $errors;
         }
 
-
-        // Ok, no errors => check existing of contact
-        $auth = wa()->getAuth();
-        $contacts = $auth->lookupByLoginFields($data);
-        foreach ($contacts as $field_id => $contact) {
+        // Ok, no errors => check uniqueness
+        $uniqueness_errors = $this->validateUniqueness($data);
+        foreach ($uniqueness_errors as $field_id => $error_msg) {
             $errors[$field_id] = (array)ifset($errors[$field_id]);
-            $errors[$field_id]['exists'] = sprintf(_ws('User with the same “%s” field value is already registered.'), $this->getFieldCaption($field_id));
+            $errors[$field_id]['exists'] = $error_msg;
         }
 
         // User already exists - stop work => return errors
@@ -856,13 +948,28 @@ class waSignupAction extends waViewAction
                 if (isset($data['email'])) {
                     $addresses['email'] = $data['email'];
                 }
+
                 if (isset($data['phone'])) {
-                    $addresses['phone'] = $data['phone'];
+                    $phone = $data['phone'];
+
+                    //
+                    $is_international = substr($phone, 0, 1) === '+';
+
+                    // phone was transformed while sent sms with onetime password
+                    $phone_transformed = $this->wasPhoneTransformedForSMS('onetime_password');
+
+                    // input phone is not international and was transformed while sent sms means in DB we has transformed phone, so validation must be on transformed phone
+                    if (!$is_international && $phone_transformed) {
+                        $transformation_result = $this->auth_config->transformPhone($phone);
+                        $phone = $transformation_result['phone'];
+                    }
+
+                    $addresses['phone'] = $phone;
                 }
 
-                $valid = $this->validateOnetimePassword($data['onetime_password'], $addresses);
+                list($valid, $details) = $this->validateOnetimePassword($data['onetime_password'], $addresses);
                 if (!$valid) {
-                    $errors['onetime_password']['invalid'] = _ws('Incorrect or expired one-time password. Try again or request a new one-time password.');
+                    $errors['onetime_password'][$details['error_code']] = $details['error_msg'];
                 }
             }
 
@@ -872,11 +979,53 @@ class waSignupAction extends waViewAction
             if (empty($data['confirmation_code'])) {
                 $errors['confirmation_code']['required'] = _ws('Enter a confirmation code to complete signup');
             } else {
-                // Validate verification code
-                $valid = $this->validateConfirmationCode($data['confirmation_code'], $data['phone']);
-                if (!$valid) {
-                    $errors['confirmation_code']['invalid'] = _ws('Incorrect or expired confirmation code. Try again or request a new code.');
+
+                // phone in input (in post data)
+                $phone = $data['phone'];
+
+                //
+                $is_international = substr($phone, 0, 1) === '+';
+
+                // phone was transformed while sent sms with confirmation code
+                $phone_transformed = $this->wasPhoneTransformedForSMS();
+
+                // input phone is not international and was transformed while sent sms means in DB we has transformed phone, so validation must be on transformed phone
+                if (!$is_international && $phone_transformed) {
+                    $transformation_result = $this->auth_config->transformPhone($phone);
+                    $phone = $transformation_result['phone'];
                 }
+
+                // Validate verification code
+                list($valid, $details) = $this->validateConfirmationCode($data['confirmation_code'], $phone);
+                if (!$valid) {
+                    $errors['confirmation_code'][$details['error_code']] = $details['error_msg'];
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate for uniqueness
+     * This method check each "login" field for uniqueness
+     *
+     * @param array $data input data
+     * @return array Errors array of errors
+     *   Format:
+     *     <field_id> => array
+     * @throws waException
+     */
+    protected function validateUniqueness($data)
+    {
+        $errors = array();
+        $auth = wa()->getAuth();
+
+        // $auth is NOT always instanceof waAuth, but lookupByLoginFields method only exists for waAuth
+        if ($auth instanceof waAuth) {
+            $contacts = $auth->lookupByLoginFields($data);
+            foreach ($contacts as $field_id => $contact) {
+                $errors[$field_id] = sprintf(_ws('User with the same “%s” field value is already registered.'), $this->getFieldCaption($field_id));
             }
         }
 
@@ -886,7 +1035,7 @@ class waSignupAction extends waViewAction
     protected function isEmailValid($email)
     {
         if (is_scalar($email)) {
-            $validator = new waEmailValidator();
+            $validator = new waEmailValidator(array('required'=>true));
             return $validator->isValid((string)$email);
         }
         return $email !== null;
@@ -911,6 +1060,12 @@ class waSignupAction extends waViewAction
             $value = is_array($value) ? $value : array();
             return $this->isArrayEmpty($value);
         }
+
+        if ($field_id === 'birthday') {
+            $validator = new waDateValidator();
+            return $validator->isEmpty($value);
+        }
+
         $value = is_scalar($value) ? (string)$value : '';
         return strlen($value) <= 0;
     }
@@ -954,7 +1109,36 @@ class waSignupAction extends waViewAction
     }
 
     /**
+     * Mark phone was transformed due the sending of sms with confirmation_code or onetime_password
+     * @param bool $transformed
+     * @param string $type 'confirmation_code', 'onetime_password'
+     * @throws waException
+     */
+    protected function markPhoneWasTransformedForSMS($transformed, $type = 'confirmation_code')
+    {
+        $key = 'wa/signup/sent_sms/phone_was_transformed/' . $type;
+        wa()->getStorage()->set($key, (bool)$transformed);
+    }
+
+    /**
+     * Was phone transformed due the sending sms with confirmation_code or onetime_password
+     * @param string $type 'confirmation_code', 'onetime_password'
+     * @return bool
+     * @throws waException
+     */
+    protected function wasPhoneTransformedForSMS($type = 'confirmation_code')
+    {
+        $key = 'wa/signup/sent_sms/phone_was_transformed/' . $type;
+        return (bool)wa()->getStorage()->get($key);
+    }
+
+    /**
      * Core of signing up action
+     *
+     * Consist of 2 parts:
+     *   - validation
+     *   - try signup logic
+     *
      * @param array $data
      * @return array(0 => <status>, 1 => <details>)
      *  - 0 - string <status> SIGNED_UP_STATUS_* const
@@ -967,7 +1151,21 @@ class waSignupAction extends waViewAction
         if ($errors) {
             return array(self::SIGNED_UP_STATUS_FAILED, $errors);
         }
+        return $this->trySignup($data);
+    }
 
+    /**
+     * Core of signing up action
+     * Try signup logic after data passed validation
+     *
+     * @param array $data
+     * @return array(0 => <status>, 1 => <details>)
+     *  - 0 - string <status> SIGNED_UP_STATUS_* const
+     *  - 1 - array <details> details what happened. In Failed status, for example, here is errors
+     * @throws waException
+     */
+    protected function trySignup($data)
+    {
         //
         $onetime_password_need = $this->auth_config->getAuthType() === waAuthConfig::AUTH_TYPE_ONETIME_PASSWORD;
 
@@ -988,13 +1186,17 @@ class waSignupAction extends waViewAction
                 $addresses['email'] = $data['email'];
             }
 
+            // diagnostic already printed inside
             list($sent, $details) = $this->sendOnetimePassword($addresses);
+
             if (!$sent) {
-                $errors = $details ? $details : array('onetime_password' => 'Send error');
-                $this->assign('errors', $errors);
+                $errors = $details ? $details : array('onetime_password_send' => _ws('Sending error'));
+                $details['onetime_password_sent'] = $sent;
+                return array(self::SIGNED_UP_STATUS_FAILED, $errors);
+            } else {
+                $details['onetime_password_sent'] = $sent;
+                return array(self::SIGNED_UP_STATUS_IN_PROCESS, $details);
             }
-            $details['onetime_password_sent'] = $sent;
-            return array(self::SIGNED_UP_STATUS_IN_PROCESS, $details);
 
         }
 
@@ -1005,15 +1207,15 @@ class waSignupAction extends waViewAction
         // So try save & sign up client right away
         if (!$need_confirm || $confirm_by_sms) {
 
-            $contact = $this->trySaveContact($data, $errors);
+            $save_options = array();
+            if ($confirm_by_sms) {
+                // to mark that phone is confirmed
+                $save_options['confirmed'] = waVerificationChannelModel::TYPE_SMS;
+            }
+            $contact = $this->trySaveContact($data, $errors, $save_options);
+
             if ($errors) {
                 return array(self::SIGNED_UP_STATUS_FAILED, $errors);
-            }
-
-            // mark that phone is confirmed
-            if ($confirm_by_sms) {
-                $cdm = new waContactDataModel();
-                $cdm->updateContactPhoneStatus($contact->getId(), $data['phone'], waContactDataModel::STATUS_CONFIRMED);
             }
 
             // IMPORTANT: User interaction behavior detail
@@ -1022,6 +1224,7 @@ class waSignupAction extends waViewAction
             $auth_right_away = $this->auth_config->getAuthType() !== waAuthConfig::AUTH_TYPE_GENERATE_PASSWORD;
 
             if (!$this->trySignupContact($contact, $auth_right_away)) {
+                // error already logged - so no need log one time again
                 return array(self::SIGNED_UP_STATUS_FAILED, array());
             }
 
@@ -1032,57 +1235,100 @@ class waSignupAction extends waViewAction
 
         // Confirm need - try send confirmation message
         $confirmation_sent = null;
-        $channels = $this->auth_config->getVerificationChannelInstances();
-        $contact_created = null;
 
-        foreach ($channels as $channel_id => $channel) {
+        // phone was transformed?
+        $phone_transformed = false;
+
+        $channels = $this->auth_config->getVerificationChannelInstances();
+        $contact = null;
+
+        foreach ($channels as $channel) {
+
+            // try email first
             if ($channel->isEmail() && !empty($data['email'])) {
+
+                // We might need rollback contact creation when sending link has failed
+                // If contact not need by deleted on failure redefined trySaveContact MUST not save this hash
+                $creation_hash = md5(uniqid('trySaveContact'));
 
                 // For this case with must create contact first
                 // Cause with need validate email related for this contact ONLY
-                $contact_created = $this->trySaveContact($data, $errors);
+                $contact = $this->trySaveContact($data, $errors, array(
+                    'creation_hash' => $creation_hash
+                ));
                 if ($errors) {
                     break;
                 }
 
-                if ($this->sendLink($contact_created)) {
+                if ($this->sendLink($contact)) {
+                    // clean rollback creation hash
+                    $contact->save(array('creation_hash' => null));
                     $confirmation_sent = waVerificationChannelModel::TYPE_EMAIL;
                     break;
                 } else {
-                    // sending is failed
-                    $contact_created->delete();
-                    $contact_created = null;
+
+                    // sending is failed - rollback creation
+                    if ($contact['creation_hash'] === $creation_hash) {
+                        $contact->delete();
+                        $contact = null;
+                    }
+
+                    // diagnostic log print
+                    $this->logError(
+                        sprintf("Couldn't send email message with link. Check email settings.\n%s",
+                            $channel->getDiagnostic()),
+                        array('line' => __LINE__, 'file' => __FILE__)
+                    );
+
                 }
             }
 
+            // then try sms
             if ($channel->isSMS() && !empty($data['phone'])) {
+
                 list($ok, $details) = $this->sendCode($data['phone']);
                 if ($ok) {
                     $confirmation_sent = waVerificationChannelModel::TYPE_SMS;
+                    $phone_transformed = !empty($details['phone_transformed']);
                     break;
-                }
-                if (!$ok) {
+                } elseif (isset($details['timeout'])) {
+                    // Tell user about timeout error right aways - so return
                     return array(self::SIGNED_UP_STATUS_FAILED, $details);
+                } else {
+                    // diagnostic log print
+                    $this->logError(
+                        sprintf("Couldn't send SMS with code. Explore sms.log for details.\n%s",
+                            $channel->getDiagnostic()),
+                        array('line' => __LINE__, 'file' => __FILE__)
+                    );
                 }
             }
         }
+
 
         // Confirmation sent by email
         if ($confirmation_sent === waVerificationChannelModel::TYPE_EMAIL) {
             return array(self::SIGNED_UP_STATUS_IN_PROCESS, array(
                 'confirmation_link_sent' => true,
-                'contact' => $contact_created
+                'contact' => $contact
             ));
         }
 
         // Confirmation sent by sms
         if ($confirmation_sent === waVerificationChannelModel::TYPE_SMS) {
             return array(self::SIGNED_UP_STATUS_IN_PROCESS, array(
-                'confirmation_code_sent' => true
+                'confirmation_code_sent' => true,
+                'phone_transformed' => $phone_transformed
             ));
         }
 
-        // Something wrong
+        // Looks like all channels failed
+        $this->logError(
+            sprintf("Couldn't send message with confirmation secret (link or code).\nLooks like there is no any working channel in system. Check auth settings for this domain %s",
+                $this->auth_config->getDomain()),
+            array('line' => __LINE__, 'file' => __FILE__)
+        );
+
         return array(self::SIGNED_UP_STATUS_FAILED, array());
     }
 
@@ -1096,6 +1342,7 @@ class waSignupAction extends waViewAction
         try {
             $result = (bool)wa()->getAuth()->auth($contact);
         } catch (waException $e) {
+            $this->logError($e);
         }
         if ($result) {
             $this->assign('auth_status', 'ok');
@@ -1103,8 +1350,6 @@ class waSignupAction extends waViewAction
         }
         return $result;
     }
-
-    //#
 
     /**
      *
@@ -1115,6 +1360,7 @@ class waSignupAction extends waViewAction
      * @param waContact $contact
      * @param bool $need_auth Need auth right away
      * @return bool
+     * @throws waException
      */
     protected function trySignupContact(waContact $contact, $need_auth = true)
     {
@@ -1145,11 +1391,17 @@ class waSignupAction extends waViewAction
     }
 
     /**
-     * @param $data
-     * @param array $errors
+     * @param array $data Input array of data
+     * @param array $errors Output Array of errors
+     * @param array $options
+     *      Extra options to manage save process.
+     *       - mixed 'confirmed'
+     *          If 'string' waContactVerificationModel::TYPE_* const - mark contact confirmed by this channel right away
+     *          Otherwise not mark
      * @return null|waContact
+     * @throws waException
      */
-    protected function trySaveContact($data, &$errors = array())
+    protected function trySaveContact($data, &$errors = array(), $options = array())
     {
         if (isset($data['birthday']['value']) && is_array($data['birthday']['value'])) {
             foreach ($data['birthday']['value'] as $bd_id => $bd_val) {
@@ -1181,15 +1433,50 @@ class waSignupAction extends waViewAction
         }
 
         $need_signup_confirm = $this->auth_config->getSignUpConfirm();
+        $options['confirmed'] = isset($options['confirmed']) ? $options['confirmed'] : null;
 
+        // Prepare email field with proper status
         if (!empty($data_to_save['email'])) {
-            $status = $need_signup_confirm ? waContactEmailsModel::STATUS_UNCONFIRMED : waContactEmailsModel::STATUS_UNKNOWN;
+
+            $status = waContactEmailsModel::STATUS_UNKNOWN;
+            if ($need_signup_confirm) {
+                if ($options['confirmed'] === waVerificationChannelModel::TYPE_EMAIL) {
+                    $status = waContactEmailsModel::STATUS_CONFIRMED;
+                } else {
+                    $status = waContactEmailsModel::STATUS_UNCONFIRMED;
+                }
+            }
+
             $data_to_save['email'] = array('value' => $data['email'], 'status' => $status);
         }
 
+        // Prepare phone field with proper status
         if (!empty($data_to_save['phone'])) {
-            $status = $need_signup_confirm ? waContactDataModel::STATUS_UNCONFIRMED : waContactDataModel::STATUS_UNKNOWN;
-            $data_to_save['phone'] = array('value' => $data['phone'], 'status' => $status);
+
+            $status = waContactDataModel::STATUS_UNKNOWN;
+            if ($need_signup_confirm) {
+                if ($options['confirmed'] === waVerificationChannelModel::TYPE_SMS) {
+                    $status = waContactDataModel::STATUS_CONFIRMED;
+                } else {
+                    $status = waContactDataModel::STATUS_UNCONFIRMED;
+                }
+            }
+
+            $phone = $data['phone'];
+
+            // non-international phone try to convert to international
+            $is_international = substr($phone, 0, 1) === '+';
+            if (!$is_international) {
+                $result = $this->auth_config->transformPhone($phone);
+                $phone = $result['phone'];
+            }
+
+            $data_to_save['phone'] = array('value' => $phone, 'status' => $status);
+        }
+
+        // Rollback creation hash
+        if (isset($options['creation_hash'])) {
+            $data_to_save['creation_hash'] = $options['creation_hash'];
         }
 
         $contact = new waContact();
@@ -1202,7 +1489,6 @@ class waSignupAction extends waViewAction
             }
             return null;
         }
-
         return $contact;
     }
 
@@ -1241,7 +1527,6 @@ class waSignupAction extends waViewAction
      * Send confirmation link
      * @param waContact
      * @return bool
-     * @throws waException
      */
     public function sendLink($recipient)
     {
@@ -1278,20 +1563,23 @@ class waSignupAction extends waViewAction
             return false;
         }
 
-        return true;
+        return $result;
     }
 
     /**
-     * @param $phone
-     * @return array
-     *   0 - status
-     *   1 - details
+     * Send code
+     * @param string $phone
+     * @return array $result
+     *   - bool  $result[0] status
+     *   - array $result[1] details
+     *        bool $result[1]['phone_transformed'] was or not phone transformed for sms sending
      */
     protected function sendCode($phone)
     {
         if (!$this->auth_config->getSignUpConfirm()) {
             return array(false, array());
         }
+
         if (!$this->isSentCodeTimeoutPassed()) {
             return array(false, array(
                 'timeout' => array(
@@ -1300,11 +1588,35 @@ class waSignupAction extends waViewAction
                 )
             ));
         }
+
+        $phone_transformed = false;
+
+        $is_international = substr($phone, 0, 1) === '+';
+
         $channel = $this->auth_config->getSMSVerificationChannelInstance();
+
         $result = $channel->sendSignUpConfirmationMessage($phone, array(
             'use_session' => true
         ));
-        return array((bool)$result, array());
+
+        // Not sent, maybe because of sms adapter not work correct with not international phones
+        if (!$result && !$is_international) {
+            // If not international phone number - transform 8 to code (country prefix)
+            $transform_result = $this->auth_config->transformPhone($phone);
+            if ($transform_result['status']) {
+                $phone_transformed = true;
+                $phone = $transform_result['phone'];
+                $result = $channel->sendSignUpConfirmationMessage($phone, array(
+                    'use_session' => true
+                ));
+            }
+        }
+
+        $result = (bool)$result;
+
+        return array($result, array(
+            'phone_transformed' => $result && $phone_transformed
+        ));
     }
 
     /**
@@ -1313,6 +1625,7 @@ class waSignupAction extends waViewAction
      * @return array
      *   0 - bool <status>
      *   1 - array <details>
+     * @throws waException
      */
     protected function sendOnetimePassword($addresses, $priority = null)
     {
@@ -1335,31 +1648,95 @@ class waSignupAction extends waViewAction
         $used_address = null;
         $used_channel_type = null;
 
-
         foreach ($channels as $channel) {
+
+            $address = null;
+
+            // choose address
             if ($channel->isEmail() && !empty($addresses['email'])) {
                 $address = $addresses['email'];
-            } elseif ($channel->isSMS() && !empty($addresses['phone'])) {
-                $address = $addresses['phone'];
-            } else {
-                $address = null;
-            }
-            if ($address) {
+
                 $sent = $channel->sendOnetimePasswordMessage($address, array(
                     'site_url' => $this->auth_config->getSiteUrl(),
                     'site_name' => $this->auth_config->getSiteName(),
-                    'login_url' => $this->auth_config->getLoginUrl(array(), true),
+                    'login_url' => $this->auth_config->getLoginUrl(array(), true)
+                ));
+
+            } elseif ($channel->isSMS() && !empty($addresses['phone'])) {
+                $phone = $addresses['phone'];
+                $is_international = substr($phone, 0, 1) === '+';
+                $phone_transformed = false;
+
+                $sent = (bool)$channel->sendOnetimePasswordMessage($phone, array(
                     'use_session' => true
                 ));
-                if ($sent) {
-                    $used_channel_type = $channel->getType();
-                    $used_address = $address;
-                    break;
+
+                // Not sent, maybe because of sms adapter not work correct with not international phones
+                if (!$sent && !$is_international) {
+                    // If not international phone number - transform 8 to code (country prefix)
+                    $transform_result = $this->auth_config->transformPhone($phone);
+                    if ($transform_result['status']) {
+                        $phone_transformed = true;
+                        $phone = $transform_result['phone'];
+                        $sent = (bool)$channel->sendOnetimePasswordMessage($phone, array(
+                            'use_session' => true
+                        ));
+                    }
                 }
+
+                $address = $phone;
+
+                if ($sent) {
+                    $this->markPhoneWasTransformedForSMS($phone_transformed, 'onetime_password');
+                }
+
+            }
+
+            if (!$address) {
+                continue;
+            }
+
+            // successful send
+            if ($sent) {
+                $used_channel_type = $channel->getType();
+                $used_address = $address;
+                break;
+            }
+
+            // fail send
+
+            // diagnostic log print
+
+            if ($channel->isEmail()) {
+                $diagnostic_message = "Couldn't send email message with onetime password. Check email settings.\n%s";
+                $this->logError(
+                    sprintf($diagnostic_message, $channel->getDiagnostic()),
+                    array('line' => __LINE__, 'file' => __FILE__)
+                );
+            } elseif ($channel->isSMS()) {
+                $diagnostic_message = "Couldn't send SMS with onetime password. Explore sms.log for details.\n%s";
+                $this->logError(
+                    sprintf($diagnostic_message, $channel->getDiagnostic()),
+                    array('line' => __LINE__, 'file' => __FILE__)
+                );
+            } else {
+                $diagnostic_message = "Couldn't send message with onetime password.\n%s";
+                $this->logError(
+                    sprintf($diagnostic_message, $channel->getDiagnostic()),
+                    array('line' => __LINE__, 'file' => __FILE__)
+                );
             }
         }
 
         if (!$sent) {
+
+            // Looks like all channels failed
+            $this->logError(
+                sprintf("Couldn't send message with onetime password.\nLooks like there is no any working channel in system. Check auth settings for this domain %s",
+                    $this->auth_config->getDomain()),
+                array('line' => __LINE__, 'file' => __FILE__)
+            );
+
             return array(false, array());
         }
 
@@ -1387,30 +1764,72 @@ class waSignupAction extends waViewAction
     /**
      * @param $code
      * @param $phone
-     * @return bool
+     * @return array
+     *  - 0 - bool status
+     *  - 1 - array details
+     *      If status is FALSE, details has keys
+     *        - string|null 'error_code' some string ID of error, that will be send to client as a controller response
+     *        - string      'error_msg'  message about error
      * @throws waException
      */
     protected function validateConfirmationCode($code, $phone)
     {
+        $default_error = _ws('Incorrect or expired confirmation code. Try again or request a new code.');
+
         if (!$this->auth_config->getSignUpConfirm()) {
-            return false;
+            return array(false, array(
+                'error_code' => waVerificationChannelSMS::VERIFY_ERROR_INVALID,
+                'error_msg' => $default_error,
+            ));
         }
+
         $channel = $this->auth_config->getSMSVerificationChannelInstance();
+
         $result = $channel->validateSignUpConfirmation($code, array(
-            'recipient' => $phone
+            'recipient' => $phone,
+            'check_tries' => array(
+                'count' => $this->auth_config->getVerifyCodeTriesCount(),
+                'clean' => true
+            )
         ));
-        return $result['status'];
+
+        if ($result['status']) {
+            return array(true, null);   // no error, successful verification
+        }
+
+        $error_code = $result['details']['error'];
+        if ($error_code === waVerificationChannel::VERIFY_ERROR_OUT_OF_TRIES) {
+            $error_msg = _ws('You have run out of available attempts. Please request a new code.');
+        } else {
+            $error_msg = $default_error;
+        }
+
+        return array(false, array(
+            'error_code' => $error_code,
+            'error_msg'  => $error_msg
+        ));
     }
 
     /**
      * @param string $password
      * @param array $addresses
-     * @return bool
+     * @return array
+     *  - 0 - bool status
+     *  - 1 - array details
+     *      If status is FALSE, details has keys
+     *        - string|null 'error_code' some string ID of error, that will be send to client as a controller response
+     *        - string      'error_msg'  message about error
+     * @throws waException
      */
     protected function validateOnetimePassword($password, $addresses)
     {
+        $default_error = _ws('Incorrect or expired one-time password. Try again or request a new one-time password.');
+
         if ($this->auth_config->getAuthType() !== waAuthConfig::AUTH_TYPE_ONETIME_PASSWORD) {
-            return false;
+            return array(false, array(
+                'error_code' => waVerificationChannelSMS::VERIFY_ERROR_INVALID,
+                'error_msg' => $default_error
+            ));
         }
 
         // Save used_channel_type so we can validate on that type of channel
@@ -1424,13 +1843,37 @@ class waSignupAction extends waViewAction
                 $used_address = $address;
             }
         }
+
         if (!$used_address) {
-            return false;
+            return array(false, array(
+                'error_code' => waVerificationChannelSMS::VERIFY_ERROR_INVALID,
+                'error_msg' => $default_error
+            ));
         }
 
         $channel = $this->auth_config->getVerificationChannelInstance(ifset($sent_info['used_channel_type']));
-        return !!$channel->validateOnetimePassword($password, array(
-            'recipient' => $used_address
+        $result = $channel->validateOnetimePassword($password, array(
+            'recipient' => $used_address,
+            'check_tries' => array(
+                'count' => $this->auth_config->getVerifyCodeTriesCount(),
+                'clean' => true
+            )
+        ));
+
+        if ($result['status']) {
+            return array(true, null);   // no error, successful verification
+        }
+
+        $error_code = $result['details']['error'];
+        if ($error_code === waVerificationChannel::VERIFY_ERROR_OUT_OF_TRIES) {
+            $error_msg = _ws('You have run out of available attempts. Please request a new one-time password.');
+        } else {
+            $error_msg = $default_error;
+        }
+
+        return array(false, array(
+            'error_code' => $error_code,
+            'error_msg'  => $error_msg
         ));
     }
 
@@ -1448,7 +1891,9 @@ class waSignupAction extends waViewAction
         if (!$this->auth_config->getSignUpConfirm()) {
             return array(
                 'status' => false,
-                'details' => array()
+                'details' => array(
+                    'error' => waVerificationChannel::VERIFY_ERROR_INVALID
+                )
             );
         }
         $channel = $this->auth_config->getEmailVerificationChannelInstance();
@@ -1461,5 +1906,40 @@ class waSignupAction extends waViewAction
     protected function notFound()
     {
         throw new waException(_ws('Page not found'), 404);
+    }
+
+    /**
+     * @param $error
+     * @param array $context
+     *   Context where error occurred. May be any string like 'line' or 'file'
+     */
+    protected function logError($error, $context = array())
+    {
+        // IMPORTANT:
+        // @var_export - @ just in case if var_export trigger warning or notice
+        // For example "var_export does not handle circular references"
+
+        if ($error instanceof Exception) {
+            $trace = $error->getTraceAsString();
+            $message = get_class($error) . " - " . $error->getCode() . " - " . $error->getMessage() . PHP_EOL . $trace . PHP_EOL;
+        } elseif (!is_scalar($error)) {
+            $message = @var_export($error, true);
+        } else {
+            $message = $error;
+        }
+
+        if ($context) {
+            $log_error = sprintf("Error=%s\nContext=%s\nAction=%s\nIP=%s",
+                $message,
+                @var_export($context, true),
+                get_class($this),
+                waRequest::getIp()
+            );
+        } else {
+            $log_error = sprintf("Error=%s\nAction=%s\nIP=%s", $message, get_class($this), waRequest::getIp());
+        }
+
+        $date = date('Y-m-d');
+        waLog::log($log_error, "signup/action/error-{$date}.log");
     }
 }

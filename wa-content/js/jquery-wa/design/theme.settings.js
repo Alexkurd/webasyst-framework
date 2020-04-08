@@ -20,6 +20,7 @@ var WAThemeSettings = ( function($) {
 
         // VARS
         that.theme_id = options["theme_id"];
+        that.theme_routes = options["theme_routes"];
         that.design_url = options["design_url"];
         that.locale = options["locale"];
         that.theme_storage_key = "theme/"+that.theme_id+"/expand";
@@ -196,7 +197,6 @@ var WAThemeSettings = ( function($) {
             $dialog_wrapper = that.$wrapper.find('#wa-theme-update-dialog'),
             href = '?module=design&action=themeUpdate&theme='+that.theme_id;
 
-
         $link.on('click', function () {
             if (!$(this).hasClass('disabled'))  {
                 $dialog_wrapper.waDialog({
@@ -207,7 +207,7 @@ var WAThemeSettings = ( function($) {
                             var l = $(this).parent();
                             if ($(this).is(':checked')) {
                                 if (!l.find('span.hint').length) {
-                                    l.append('<span class="hint">'+ that.locale.will_be_lost +'</span>');
+                                    l.append(' <span class="hint">'+ that.locale.will_be_lost +'</span>');
                                 }
                             } else {
                                 l.find('span.hint').remove();
@@ -351,6 +351,7 @@ var WAThemeSettings = ( function($) {
         $link.on('click', function () {
             if (!$(this).hasClass('disabled'))  {
                 $dialog_wrapper.waDialog({
+                    height: '420px',
                     disableButtonsOnSubmit: true,
                     onSubmit: function () {
                         $.post(href, $(this).serialize(), function (response) {
@@ -379,6 +380,9 @@ var WAThemeSettings = ( function($) {
                 $divider = that.$form.find('div[data-divider-id="'+ divider_id +'"][data-divider-level="1"]');
 
             that.expandGroup($divider);
+
+            that.$theme_navigation.trigger("is_anchor_set");
+
             $('html, body').animate({ scrollTop: $divider.offset().top });
         });
 
@@ -390,6 +394,9 @@ var WAThemeSettings = ( function($) {
                 $other_block = that.$wrapper.find('.js-theme-other-data[data-id="'+ other_block_id +'"]');
 
             that.expandOtherBlock($other_block);
+
+            that.$theme_navigation.trigger("is_anchor_set");
+
             $('html, body').animate({ scrollTop: $other_block.offset().top });
         });
     };
@@ -400,18 +407,28 @@ var WAThemeSettings = ( function($) {
             href = "?module=design&action=themeDelete";
 
         $link.on('click', function () {
-            if (!$(this).hasClass('disabled') && confirm($(this).attr('title'))) {
-                $.post(href, { theme: that.theme_id}, function (response) {
+            var $self = $(this);
+
+            if (that.theme_routes.length) {
+                var $dialog_wrapper = that.$wrapper.find('#wa-theme-blocking-removal-dialog');
+                $dialog_wrapper.waDialog();
+
+                return false;
+            }
+
+            if (!$self.hasClass('disabled') && confirm($self.data('confirm'))) {
+                $.post(href, { theme: that.theme_id }, function (response) {
                     if (response.status === 'ok') {
                         if(response.data.theme_id) {
                             $('#wa-theme-block-' + response.data.theme_id).remove();
                             $('#wa-theme-list-' + response.data.theme_id).remove();
                         }
                         $('#wa-theme-list a').each(function () {
-                            if ($(this).attr('href').indexOf('theme=' + theme_id) != -1) {
+                            if ($(this).attr('href').indexOf('theme=' + that.theme_id) != -1) {
                                 $(this).parent().remove();
                             }
                         });
+                        alert($self.data('success'));
                         location.href = $('#wa-theme-list li:first a').attr('href');
                     } else {
                         alert(response.errors);
@@ -567,10 +584,20 @@ var WAThemeSettings = ( function($) {
             $other_blocks = that.$other_blocks,
             expanded_group = localStorage.getItem(that.theme_storage_key);
 
+        // If the design theme is not used or it does not provide settings, then there’s no need to
+        if (!that.$theme_navigation.length) {
+            return false;
+        }
+
+        var fixedBlock = initFixedBlock();
+        fixedBlock.is_disabled = true;
+
         if (expanded_group === that.expand_all_storage_value) {
             that.setCollapseAllItems();
+            disableFixedBlock(false);
         } else {
             that.setExpandAllItems();
+            disableFixedBlock(true);
         }
 
         // Expand all
@@ -586,6 +613,8 @@ var WAThemeSettings = ( function($) {
             });
 
             localStorage.setItem(that.theme_storage_key, that.expand_all_storage_value);
+
+            disableFixedBlock(false);
         });
 
         // Collapse all
@@ -601,6 +630,8 @@ var WAThemeSettings = ( function($) {
             });
 
             localStorage.removeItem(that.theme_storage_key);
+
+            disableFixedBlock(true);
         });
 
         // Expand divider
@@ -619,6 +650,230 @@ var WAThemeSettings = ( function($) {
 
             localStorage.removeItem(that.theme_storage_key);
         });
+
+        that.$theme_navigation.on("is_anchor_set", function() {
+            disableFixedBlock(true);
+        });
+
+        function disableFixedBlock(disable) {
+            fixedBlock.is_disabled = !!disable;
+            $(window).trigger("scroll");
+        }
+
+        function initFixedBlock() {
+            /**
+             * @class FixedBlock
+             * @description used for fixing form buttons
+             * */
+            var FixedBlock = ( function($) {
+
+                FixedBlock = function(options) {
+                    var that = this;
+
+                    // DOM
+                    that.$window = $(window);
+                    that.$wrapper = options["$section"];
+                    that.$wrapperW = options["$wrapper"];
+                    that.$form = that.$wrapper.parents('form');
+
+                    // VARS
+                    that.type = (options["type"] || "bottom");
+                    that.lift = (options["lift"] || 0);
+
+                    // DYNAMIC VARS
+                    that.offset = {};
+                    that.$clone = false;
+                    that.is_fixed = false;
+                    that.is_disabled = false;
+
+                    // INIT
+                    that.initClass();
+                };
+
+                FixedBlock.prototype.initClass = function() {
+                    var that = this,
+                        $window = that.$window,
+                        resize_timeout = 0;
+
+                    $window.on("resize", function() {
+                        clearTimeout(resize_timeout);
+                        resize_timeout = setTimeout( function() {
+                            that.resize();
+                        }, 100);
+                    });
+
+                    $window.on("scroll", watcher);
+
+                    that.$wrapper.on("resize", function() {
+                        that.resize();
+                    });
+
+                    that.$form.on("input", function () {
+                        that.resize();
+                    });
+
+                    that.init();
+
+                    function watcher() {
+                        var is_exist = $.contains($window[0].document, that.$wrapper[0]);
+                        if (is_exist) {
+                            if (!that.is_disabled) {
+                                that.onScroll($window.scrollTop());
+                            } else {
+                                that.clear();
+                            }
+                        } else {
+                            $window.off("scroll", watcher);
+                        }
+                    }
+
+                    that.$wrapper.data("block", that);
+                };
+
+                FixedBlock.prototype.init = function() {
+                    var that = this;
+
+                    if (!that.$clone) {
+                        var $clone = $("<div />").css("margin", "0");
+                        that.$wrapper.after($clone);
+                        that.$clone = $clone;
+                    }
+
+                    that.$clone.hide();
+
+                    var offset = that.$wrapper.offset();
+
+                    that.offset = {
+                        left: offset.left,
+                        top: offset.top,
+                        width: that.$wrapper.outerWidth(),
+                        height: that.$wrapper.outerHeight()
+                    };
+                };
+
+                FixedBlock.prototype.resize = function() {
+                    var that = this;
+
+                    switch (that.type) {
+                        case "top":
+                            that.fix2top(false);
+                            break;
+                        case "bottom":
+                            that.fix2bottom(false);
+                            break;
+                    }
+
+                    var offset = that.$wrapper.offset();
+                    that.offset = {
+                        left: offset.left,
+                        top: offset.top,
+                        width: that.$wrapper.outerWidth(),
+                        height: that.$wrapper.outerHeight()
+                    };
+
+                    that.$window.trigger("scroll");
+                };
+
+                /**
+                 * @param {Number} scroll_top
+                 * */
+                FixedBlock.prototype.onScroll = function(scroll_top) {
+                    var that = this,
+                        window_w = that.$window.width(),
+                        window_h = that.$window.height();
+
+                    // update top for dynamic content
+                    that.offset.top = (that.$clone && that.$clone.is(":visible") ? that.$clone.offset().top : that.$wrapper.offset().top);
+
+                    switch (that.type) {
+                        case "top":
+                            var use_top_fix = (that.offset.top - that.lift < scroll_top);
+
+                            that.fix2top(use_top_fix);
+                            break;
+                        case "bottom":
+                            var use_bottom_fix = (that.offset.top && scroll_top + window_h < that.offset.top + that.offset.height);
+                            that.fix2bottom(use_bottom_fix);
+                            break;
+                    }
+
+                };
+
+                /**
+                 * @param {Boolean|Object} set
+                 * */
+                FixedBlock.prototype.fix2top = function(set) {
+                    var that = this,
+                        fixed_class = "is-top-fixed";
+
+                    if (set) {
+                        that.$clone.css({
+                            height: that.$wrapper.outerHeight()
+                        }).show();
+
+                        that.$wrapper
+                            .css({
+                                position: "fixed",
+                                top: that.lift,
+                                left: that.offset.left,
+                                width: that.$clone.width()
+                            })
+                            .addClass(fixed_class);
+
+                    } else {
+                        that.$wrapper.removeClass(fixed_class).removeAttr("style");
+                        that.$clone.removeAttr("style").hide();
+                    }
+
+                    that.is_fixed = !!set;
+                };
+
+                /**
+                 * @param {Boolean|Object} set
+                 * */
+                FixedBlock.prototype.fix2bottom = function(set) {
+                    var that = this,
+                        fixed_class = "is-bottom-fixed";
+
+                    if (set) {
+                        that.$clone.css({
+                            height: that.$wrapper.outerHeight()
+                        }).show();
+
+                        that.$wrapper
+                            .css({
+                                position: "fixed",
+                                bottom: 0,
+                                left: that.offset.left,
+                                width: that.$clone.width()
+                            })
+                            .addClass(fixed_class);
+
+                    } else {
+                        that.$wrapper.removeClass(fixed_class).removeAttr("style");
+                        that.$clone.removeAttr("style").hide();
+                    }
+
+                    that.is_fixed = !!set;
+                };
+
+                FixedBlock.prototype.clear = function() {
+                    var that = this;
+
+                    that.$wrapper.removeClass("is-top-fixed").removeClass("is-bottom-fixed").removeAttr("style");
+                    that.$clone.removeAttr("style").hide();
+                };
+
+                return FixedBlock;
+
+            })(jQuery);
+
+            return new FixedBlock({
+                $wrapper: that.$theme_navigation.closest(".wa-theme-content"),
+                $section: that.$theme_navigation,
+                type: "top"
+            });
+        }
     };
 
     WAThemeSettings.prototype.initSettingsControl = function () {
@@ -761,8 +1016,14 @@ var WAThemeSettings = ( function($) {
     };
 
     WAThemeSettings.prototype.initScrollToTopButton = function() {
-        var $button = $('#wa-design-scroll-top'),
+        var that = this,
+            $button = $('#wa-design-scroll-top'),
             top_show = 300;
+
+        // If the design theme is not used or it does not provide settings, then there’s no need to
+        if (!that.$theme_navigation.length) {
+            return false;
+        }
 
         $(document).ready(function() {
             $(window).scroll(function () {

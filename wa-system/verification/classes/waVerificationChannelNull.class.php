@@ -12,6 +12,9 @@
  */
 class waVerificationChannelNull extends waVerificationChannel
 {
+    /**
+     * waVerificationChannelNull constructor.
+     */
     public function __construct() {}
 
     public function exists()
@@ -88,7 +91,9 @@ class waVerificationChannelNull extends waVerificationChannel
     {
         return array(
             'status' => false,
-            'details' => array()
+            'details' => array(
+                'error' => self::VERIFY_ERROR_INVALID
+            )
         );
     }
 
@@ -158,29 +163,21 @@ class waVerificationChannelNull extends waVerificationChannel
         return false;
     }
 
-    /**
-     * @param string $secret
-     * @param array $options
-     *
-     * @return array Associative array
-     *
-     *   Format of this associative array:
-     *
-     *   - bool  'status'  - successful or not was validation
-     *
-     *   - array 'details' - detailed information about result of validation
-     *      Format of details depends on 'status'
-     *        If 'status' is TRUE
-     *          - string 'address'     - address that was validated
-     *          - int    'contact_id'  - id of contact bind to this address
-     *        Otherwise details is empty array
-     */
-    public function validateRecoveryPasswordSecret($secret, $options = array())
+    protected function validateSecret($secret, $asset_name, $options = array())
     {
         return array(
-            'status' => false,
-            'details' => array()
+            'status'  => false,
+            'details' => array(
+                'tries'      => null,
+                'rest_tries' => null,
+                'error'      => self::VERIFY_ERROR_INVALID
+            )
         );
+    }
+
+    public function validateRecoveryPasswordSecret($secret, $options = array())
+    {
+        return $this->validateSecret($secret, $options);
     }
 
     public function invalidateRecoveryPasswordSecret($secret, $options = array())
@@ -194,6 +191,39 @@ class waVerificationChannelNull extends waVerificationChannel
     }
 
     public function validateOnetimePassword($password, $options = array())
+    {
+        return false;
+    }
+
+    public function sendConfirmationCodeMessage($recipient, $options = array())
+    {
+        return false;
+    }
+
+    public function isWorking()
+    {
+        return false;
+    }
+
+    /**
+     * Get vars name for each predefined template, optionally with description
+     * @param string $template_name
+     * @param bool $with_description
+     * @return array
+     */
+    public function getTemplateVars($template_name, $with_description = false)
+    {
+        return array();
+    }
+
+    /**
+     * Compare 2 secret for equal
+     * @param $input_secret
+     * @param $asset_secret
+     * @param $asset_name
+     * @return bool
+     */
+    protected function isSecretEquals($input_secret, $asset_secret, $asset_name)
     {
         return false;
     }

@@ -55,6 +55,7 @@ class waFrontController
                 $routing = new waRouting($this->system, array(
                     'default' => array(
                         array(
+                            'is_backend_route' => true,
                             'url' => wa()->getConfig()->systemOption('backend_url').'/'.$app.'/*',
                             'app' => $app,
                         ),
@@ -202,7 +203,15 @@ class waFrontController
         return $result;
     }
 
-    /** Helper for $this->execute() */
+    /** Helper for $this->execute()
+     * @param $plugin
+     * @param $module
+     * @param $action
+     * @param bool $try_default
+     * @param array $class_names
+     * @return array
+     * @throws waException
+     */
     protected function getController($plugin, $module, $action, $try_default = false, $class_names = array())
     {
         // app prefix for class names
@@ -212,7 +221,7 @@ class waFrontController
         // Check possible ways to handle the request one by one
         //
 
-        // Single Controller (recomended)
+        // Single Controller (recommended)
         $class_name = $prefix.($plugin ? ucfirst($plugin).'Plugin' : '').ucfirst($module).($action ? ucfirst($action) : '').'Controller';
         if (class_exists($class_name)) {
             return array(new $class_name(), null);

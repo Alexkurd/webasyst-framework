@@ -61,6 +61,7 @@
  * @property string $bank_account_number
  * @property string $bik
  * @property string $color
+ * @property array required_address_fields
  */
 class russianpostShipping extends waShipping
 {
@@ -84,10 +85,10 @@ class russianpostShipping extends waShipping
     /**
      * Формирует HTML-код пользовательского элемента управления с идентификатором 'WeightCosts'.
      *
-     * @see waHtmlControl::getControl()
      * @param string $name Идентификатор элемента управления, указанный в файле настроек
      * @param array $params Параметры элемента управления, указанные в файле настроек
      * @return string HTML-код элемента управления
+     * @see waHtmlControl::getControl()
      */
     public static function settingWeightCosts($name, $params = array())
     {
@@ -170,10 +171,10 @@ class russianpostShipping extends waShipping
     /**
      * Формирует HTML-код пользовательского элемента управления с идентификатором 'RegionRatesControl'.
      *
-     * @see waHtmlControl::getControl()
      * @param string $name Идентификатор элемента управления
      * @param array $params Параметры элемента управления
      * @return string
+     * @see waHtmlControl::getControl()
      */
     public static function settingRegionRatesControl($name, $params = array())
     {
@@ -236,13 +237,13 @@ class russianpostShipping extends waShipping
     /**
      * Ограничивает диапазон адресов, по которым возможна доставка с помощью этого плагина.
      *
+     * @return array Верните пустой array(), если необходимо разрешить доставку по любым адресам без ограничений
      * @example <pre>return array(
      *   'country' => 'rus', // или array('rus', 'ukr')
      *   'region'  => '77',
      *   // или array('77', '50', '69', '40');
      *   // либо не указывайте элемент 'region', если вам не нужно ограничивать доставку отдельными регионами указанной страны
      * );</pre>
-     * @return array Верните пустой array(), если необходимо разрешить доставку по любым адресам без ограничений
      */
     public function allowedAddress()
     {
@@ -261,7 +262,8 @@ class russianpostShipping extends waShipping
     /**
      * Возвращает массив полей формы запроса адреса доставки, которые должны запрашиваться у покупателя во время оформления заказа.
      *
-     * @see waShipping::requestedAddressFields()
+     * @return array|bool Верните false, если плагин не длолжен запрашивать адрес доставки;
+     * верните пустой array(), если все поля адреса должны запрашиваться у покупателя
      * @example <pre>return array(
      *     // поле запрашивается
      *     'zip'     => array(),
@@ -275,18 +277,23 @@ class russianpostShipping extends waShipping
      *
      *     // поле не запрашивается
      *     'street'  => false,
+     *
+     *     // Поле обязательно
+     *     'street' => array('required' => true)
+     *
      * );</pre>
-     * @return array|bool Верните false, если плагин не длолжен запрашивать адрес доставки;
-     * верните пустой array(), если все поля адреса должны запрашиваться у покупателя
+     * @see waShipping::requestedAddressFields()
      */
     public function requestedAddressFields()
     {
+        $required_address = $this->required_address_fields;
+
         return array(
-            'zip'     => array(),
+            'zip'     => isset($required_address['zip']) ? array('required' => true) : array(),
             'country' => array('hidden' => true, 'value' => 'rus', 'cost' => true),
             'region'  => array('cost' => true),
             'city'    => array(),
-            'street'  => array(),
+            'street'  => isset($required_address['street']) ? array('required' => true) : array(),
         );
     }
 
@@ -357,6 +364,7 @@ class russianpostShipping extends waShipping
      * либо false, если способ доставки в текущих условиях не дложен быть доступен.
      *
      *
+     * @return mixed
      * @example <pre>
      * //возврат массива вариантов доставки
      * return array(
@@ -392,7 +400,6 @@ class russianpostShipping extends waShipping
      *     $address = $this->getAddress($field = null);
      *     </pre>
      *
-     * @return mixed
      */
     protected function calculate()
     {
@@ -762,14 +769,14 @@ HTML;
     /**
      * Возвращает массив с информацией о печатных формах, формируемых плагином.
      *
+     * @param waOrder $order Объект, содержащий информацию о заказе
+     * @return array
      * @example return <pre>array(
      *    'form_id' => array(
      *        'name' => _wp('Printform name'),
      *        'description' => _wp('Printform description'),
      *    ),
      * );</pre>
-     * @param waOrder $order Объект, содержащий информацию о заказе
-     * @return array
      */
     public function getPrintForms(waOrder $order = null)
     {
@@ -803,8 +810,8 @@ HTML;
      * @param string $id Идентификатор формы, определенный в методе getPrintForms()
      * @param waOrder $order Объект, содержащий информацию о заказе
      * @param array $params Дополнительные необязательные параметры, передаваемые в шаблон печатной формы
-     * @throws waException
      * @return string HTML-код формы
+     * @throws waException
      */
     public function displayPrintForm($id, waOrder $order, $params = array())
     {
@@ -867,14 +874,19 @@ HTML;
 
                     $size = 35;
                     $sizes = array(35, 30, 30);
-                    $full_address = waRequest::request('shipping_address', $this->buildAddress($order->billing_address));
+
+                    $billing_address = $order->billing_address;
+                    if (!$this->buildAddress($billing_address)) {
+                        $billing_address = $order->shipping_address;
+                    }
+                    $full_address = waRequest::request('shipping_address',  $this->buildAddress($billing_address));
                     $address = $this->adjustSizes($full_address, $sizes, $size);
 
                     $this->printOnImage($image, $address[0], 1200, 1770, $size);
                     $this->printOnImage($image, $address[1], 850, 1840, $size);
                     $this->printOnImage($image, $address[2], 850, 1910, $size);
 
-                    $this->printOnImagePersign($image, $order->billing_address['zip'], 1990, 1900, 34, 35);
+                    $this->printOnImagePersign($image, $billing_address['zip'], 1990, 1900, 34, 35);
 
                     header("Content-type: image/gif");
                     imagegif($image);
@@ -1010,10 +1022,10 @@ HTML;
 
                     $zip = waRequest::get('shipping_zip', $order->shipping_address['zip']);
                     $this->printOnImagePersign($image, $zip, 3615, 2435, 103, 80);
-                    $order_price_d = self::floatval(waRequest::get('order_price_d', floor($order->total)));
+                    $order_price_d = self::floatval(waRequest::get('order_price_d', floor($order->total - $order->shipping)));
                     if ($order_price_d && waRequest::get('order_price_checked')) {
                         $this->printOnImage($image, 'X', 2310, 160, 35);
-                        $order_price = waRequest::get('order_price', waCurrency::format('%.W', floor($order->total), $order->currency));
+                        $order_price = waRequest::get('order_price', waCurrency::format('%.W', floor($order->total - $order->shipping), $order->currency));
 
                         $size = 60;
                         $prices = $this->adjustSizes(sprintf('%s (%s) руб.', $order_price_d, $order_price), array(47), $size);
@@ -1028,7 +1040,7 @@ HTML;
 
                         $order_amount_f = ($order_amount_d - floor($order_amount_d)) * 100;
                         $size = 60;
-                        $prices = $this->adjustSizes(sprintf('%s (%s) руб. %02d коп.', $order_amount_d, $order_amount, $order_amount_f), array(47), $size);
+                        $prices = $this->adjustSizes(sprintf('%s (%s) руб. %02d коп.', floor($order_amount_d), $order_amount, $order_amount_f), array(47), $size);
                         $this->printOnImage($image, reset($prices), 2300, 1250 + (35 - $size), $size);
                     }
 
@@ -1103,12 +1115,19 @@ HTML;
 
 
                     $this->printOnImage($image, waRequest::request('billing_name', $order->contact_name), 310, 1550);
-                    $full_address = waRequest::request('billing_address', $this->buildAddress($order->billing_address));
+
+
+                    $billing_address = $order->billing_address;
+                    if (!$this->buildAddress($billing_address)) {
+                        $billing_address = $order->shipping_address;
+                    }
+
+                    $full_address = waRequest::request('billing_address', $this->buildAddress($billing_address));
 
                     $size = 35;
                     $sizes = array(60, 65);
                     $address = $this->adjustSizes($full_address, $sizes, $size);
-                    $this->printOnImagePersign($image, $order->billing_address['zip'], 1965, 1690, 58.3, 50);
+                    $this->printOnImagePersign($image, $billing_address['zip'], 1965, 1690, 58.3, 50);
 
                     $this->printOnImage($image, $address[0], 520, 1635 + 35 - $size, $size);
                     $this->printOnImage($image, $address[1], 70, 1720 + 35 - $size, $size);
@@ -1141,7 +1160,11 @@ HTML;
                     $this->view()->assign('action', 'preview');
                 }
                 $this->view()->assign('order', $order);
-                $this->view()->assign('billing_address', $this->buildAddress($order->billing_address));
+                $billing_address = $this->buildAddress($order->billing_address);
+                if (empty($billing_address)) {
+                    $billing_address = $this->buildAddress($order->shipping_address);
+                }
+                $this->view()->assign('billing_address', $billing_address);
                 $this->view()->assign('editable', waRequest::post() ? false : true);
                 break;
         }
@@ -1461,10 +1484,10 @@ HTML;
     /**
      * Возвращает информацию о статусе отправления (HTML).
      *
-     * @see waShipping::tracking()
-     * @example return _wp('Online shipment tracking: <a href="link">link</a>.');
      * @param string $tracking_id Необязательный идентификатор отправления, указанный пользователем
      * @return string
+     * @see waShipping::tracking()
+     * @example return _wp('Online shipment tracking: <a href="link">link</a>.');
      */
     public function tracking($tracking_id = null)
     {
@@ -1872,8 +1895,8 @@ HTML;
     /**
      * Возвращает ISO3-код валюты или массив кодов валют, которые поддерживает этот плагин.
      *
-     * @see waShipping::allowedCurrency()
      * @return array|string
+     * @see waShipping::allowedCurrency()
      */
     public function allowedCurrency()
     {
@@ -1883,8 +1906,8 @@ HTML;
     /**
      * Возвращает обозначение единицы веса или массив единиц веса, которые поддерживает этот плагин.
      *
-     * @see waShipping::allowedWeightUnit()
      * @return array|string
+     * @see waShipping::allowedWeightUnit()
      */
     public function allowedWeightUnit()
     {

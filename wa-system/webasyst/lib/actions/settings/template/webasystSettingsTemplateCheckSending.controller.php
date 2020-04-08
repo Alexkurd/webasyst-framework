@@ -47,6 +47,18 @@ class webasystSettingsTemplateCheckSendingController extends webasystSettingsJso
             $errors[] = array('field' => 'template', 'message' => _ws('Select at least one template to send'));
         }
 
+        if (empty($errors)) {
+            $result = wa('webasyst')->event('backend_before_email_send_test', ref([
+                'channel' => $this->channel,
+                'data' => $data,
+            ]));
+            foreach($result as $source => $res) {
+                if (!empty($res['errors'])) {
+                    $errors = array_merge(ifset($errors, []), $res['errors']);
+                }
+            }
+        }
+
         return array($errors, $valid_templates);
     }
 
@@ -128,6 +140,18 @@ class webasystSettingsTemplateCheckSendingController extends webasystSettingsJso
                         'site_name' => $site_name,
                         'login_url' => $login_url,
                         'password' => 'TEST-PASS',
+                        'is_test_send' => true
+                    ));
+
+                    break;
+
+                case 'confirmation_code':
+
+                    $res = $this->channel->sendConfirmationCodeMessage($recipient, array(
+                        'site_url' => $site_url,
+                        'site_name' => $site_name,
+                        'login_url' => $login_url,
+                        'code' => 'TEST-CODE',
                         'is_test_send' => true
                     ));
 

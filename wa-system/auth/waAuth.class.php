@@ -62,20 +62,6 @@ class waAuth implements waiAuth
             $this->options['is_user'] = $this->env == 'backend';
         }
 
-        if (!isset($this->options['remember_enabled'])) {
-            if ($this->env == 'backend') {
-                try {
-                    $app_settings_model = new waAppSettingsModel();
-                    $this->options['remember_enabled'] = $app_settings_model->get('webasyst', 'rememberme', true);
-                } catch (waAuthException $e) {
-                    $this->options['remember_enabled'] = true;
-                }
-            } else {
-                $this->options['remember_enabled'] = true;
-            }
-        }
-
-
         $this->auth_config = waAuthConfig::factory($this->env);
 
         $this->initLoginFieldIds();
@@ -83,12 +69,15 @@ class waAuth implements waiAuth
     }
 
     /**
-     * Auth user returns result of auth
+     * Try authorize contact in current session
      *
-     * @param array $params
-     * @return mixed
+     * @param array|waContact $params
+     * @return array|bool - If failed - return false, otherwise contact info as associative array
      * @throws waAuthException
      * @throws waAuthInvalidCredentialsException
+     * @throws waAuthConfirmEmailException
+     * @throws waAuthConfirmPhoneException
+     * @throws waAuthRunOutOfTriesException
      * @throws waException
      */
     public function auth($params = array())
@@ -102,8 +91,13 @@ class waAuth implements waiAuth
     }
 
     /**
-     * @return array|bool|null
+     * Check if in current session authorized some contact and return info about it
+     *
+     * @return array|bool|null - if FALSE (or some kind of emptiness) then there is not authorized contact in session
+     *  Otherwise returns info about contact (as associative array)
+     *
      * @throws waAuthException
+     * @throws waException
      */
     public function isAuth()
     {
@@ -151,12 +145,26 @@ class waAuth implements waiAuth
     }
 
     /**
+     * Get first found singed up contact by this authentication ID (login)
+     *
+     * For this method login can be
+     *   - actual contact login (wa_contact.login) - self::LOGIN_FIELD_LOGIN
+     *   - email of contact - self::LOGIN_FIELD_EMAIL
+     *   - phone of contact - self::LOGIN_FIELD_PHONE
+     *
+     *
      * @param string $login
-     * @param $priority
+     * @param null|string $login_type
+     *      - If waAuth::LOGIN_FIELD_* const - By which login type we will look up.
+     *      - Otherwise (NULL, skipped, etc) will look up
+     *          - by suitable for $login login type or
+     *          - by any login type (ordered by priority as in waAuthConfig)
+     *
      * @return array|null
      * @throws waAuthException
+     * @throws waException
      */
-    public function getByLogin($login, $priority = null)
+    public function getByLogin($login, $login_type = null)
     {
         $login = is_scalar($login) ? (string)$login : '';
         if (strlen($login) <= 0) {
@@ -169,16 +177,23 @@ class waAuth implements waiAuth
             $login_values[$field_id] = $login;
         }
 
-        // Priority for look up
-        if ($this->isValidEmail($login)) {
-            $priority = self::LOGIN_FIELD_EMAIL;
-        } elseif ($this->isValidPhoneNumber($login)) {
-            $priority = self::LOGIN_FIELD_PHONE;
-        } else {
-            $priority = null;
+        // typecast input parameter
+        if ($login_type !== self::LOGIN_FIELD_LOGIN || $login_type !== self::LOGIN_FIELD_EMAIL || $login_type !== self::LOGIN_FIELD_PHONE) {
+            $login_type = null;
         }
 
-        $result = $this->lookupByLoginFields($login_values, $priority, 'first');
+        // By which login type we will look up
+        if ($login_type === null) {
+            if ($this->isValidEmail($login)) {
+                $login_type = self::LOGIN_FIELD_EMAIL;
+            } elseif ($this->isValidPhoneNumber($login)) {
+                $login_type = self::LOGIN_FIELD_PHONE;
+            } else {
+                $login_type = null;
+            }
+        }
+
+        $result = $this->lookupByLoginFields($login_values, $login_type, 'first');
         if (!$result) {
             return null;
         }
@@ -223,10 +238,43 @@ class waAuth implements waiAuth
     }
 
     /**
+     * Get registered contact by phone with taking into account transformation settings of auth config
      * @param string $phone
      * @return array|null
      */
     protected function getByPhone($phone)
+    {
+        if (!$this->isValidPhoneNumber($phone)) {
+            return null;
+        }
+
+        // do always first try by phone as it
+        $contact = $this->findByPhone($phone);
+        if ($contact) {
+            return $contact;
+        }
+
+        $phone = (string)$phone;
+        $is_international = substr($phone, 0, 1) === '+';
+
+        // If international phone number - "reverse" transform to phone with 8
+        // If not international phone number - transform 8 to code (country prefix)
+        $result = $this->auth_config->transformPhone($phone, $is_international);
+
+        // phone is changed (transformation has been applied), so try find by this new phone
+        if ($result['status']) {
+            return $this->findByPhone($result['phone']);
+        }
+
+        return null;
+    }
+
+    /**
+     * Find registered contact by phone without taking into account transformation settings of auth config
+     * @param $phone
+     * @return array|null
+     */
+    protected function findByPhone($phone)
     {
         if (!$this->isValidPhoneNumber($phone)) {
             return null;
@@ -329,29 +377,31 @@ class waAuth implements waiAuth
 
         $params = is_array($params) && !empty($params) ? $params : array();
 
-        $is_post = wa()->getRequest()->getMethod() === 'post' && wa()->getRequest()->post('wa_auth_login');
-
-        if (!isset($params['login']) && $is_post) {
-            $params['login'] = wa()->getRequest()->post('login');
-        }
         if (isset($params['login'])) {
             $params['login'] = is_scalar($params['login']) ? (string)$params['login'] : '';
         } else {
             $params['login'] = null;
         }
 
-
-        if (!isset($params['password']) && $is_post) {
-            $params['password'] = wa()->getRequest()->post('password');
+        if (isset($params['password'])) {
+            $params['password'] = is_scalar($params['password']) ? (string)$params['password'] : '';
+        } else {
+            $params['password'] = null;
         }
-        $params['password'] = isset($params['password']) && is_scalar($params['password']) ? (string)$params['password'] : '';
 
-        if (!isset($params['remember']) && wa()->getRequest()->post('remember')) {
-            $params['remember'] = !!wa()->getRequest()->post('remember');
+
+        if (isset($params['remember'])) {
+            $params['remember'] = (bool)$params['remember'];
+        } else {
+            $params['remember'] = false;
         }
-        $params['remember'] = isset($params['remember']) ? (bool)$params['remember'] : false;
 
-        $params['id'] = isset($params['id']) && is_scalar($params['id']) ? (int)$params['id'] : null;
+
+        if (isset($params['id'])) {
+            $params['id'] =  is_scalar($params['id']) ? (int)$params['id'] : null;
+        } else {
+            $params['id'] =  null;
+        }
 
         return $params;
     }
@@ -369,6 +419,7 @@ class waAuth implements waiAuth
      * @throws waAuthInvalidCredentialsException
      * @throws waAuthConfirmEmailException
      * @throws waAuthConfirmPhoneException
+     * @throws waAuthRunOutOfTriesException
      * @throws waException
      */
     protected function _auth($params)
@@ -397,15 +448,15 @@ class waAuth implements waiAuth
 
         $user_info = $this->getByLogin($login);
         if (!$user_info || ($this->options['is_user'] && $user_info['is_user'] <= 0)) {
-            throw new waAuthException(_ws("Contact is not registered."));
+            throw new waAuthException(_ws("Invalid login name or password."));
         }
 
         if ($this->isOnetimePasswordMode()) {
+            // this method could throw different kind of exceptions by himself
             $result = $this->_authByOnetimePassword(new waContact($user_info['id']), $login, $password);
-            if (!$result) {
-                throw new waAuthInvalidCredentialsException();
+            if ($result) {
+                return $this->_afterAuth($user_info, $params);
             }
-            return $this->_afterAuth($user_info, $params);
         }
 
         $result = $this->_authByPassword($user_info, $password);
@@ -450,7 +501,7 @@ class waAuth implements waiAuth
         $phone_row = $cdm->getPhone($contact['id']);
 
         // error that stop logging in
-        $error = new waAuthException(_ws("Contact can't be authorized"));;
+        $error = new waAuthException(_ws("Contact can't be authorized"));
 
         // What login field used to auth
         $login_field_id = $this->current_login_field_id;
@@ -585,8 +636,8 @@ class waAuth implements waiAuth
         $response = waSystem::getInstance()->getResponse();
 
         // if remember
-        $model = new waAppSettingsModel();
-        if ($remember && $model->get('webasyst', 'rememberme', 1)) {
+        $remember_enabled = $this->auth_config->getRememberMe();
+        if ($remember && $remember_enabled) {
             $cookie_domain = ifset($this->options['cookie_domain'], '');
             $response->setCookie('auth_token', $this->getToken($user_info), time() + 2592000, null, $cookie_domain, false, true);
             $response->setCookie('remember', 1);
@@ -606,20 +657,32 @@ class waAuth implements waiAuth
         return strlen($contact_password) > 0 && waContact::getPasswordHash($password) === $contact_password;
     }
 
+    /**
+     * @param waContact $contact
+     * @param $login
+     * @param $password
+     * @return bool
+     * @throws waAuthInvalidCredentialsException
+     * @throws waAuthRunOutOfTriesException
+     * @throws waException
+     */
     protected function _authByOnetimePassword(waContact $contact, $login, $password)
     {
         if (!$this->isOnetimePasswordMode()) {
-            return false;
+            throw new waAuthInvalidCredentialsException();
         }
         if (!$contact->exists()) {
-            return false;
+            throw new waAuthInvalidCredentialsException();
         }
 
         $csm = new waContactSettingsModel();
         $asset_id = $csm->getOne($contact->getId(), 'webasyst', 'onetime_password_id');
         if (!$asset_id) {
-            return false;
+            throw new waAuthInvalidCredentialsException();
         }
+
+        // was phone was transformed during the sms sending
+        $phone_transformed = $csm->getOne($contact->getId(), 'webasyst', 'onetime_password_phone_transformed');
 
         if ($this->isValidEmail($login)) {
             $priority = waVerificationChannelModel::TYPE_EMAIL;
@@ -631,22 +694,56 @@ class waAuth implements waiAuth
 
         $channels = $this->auth_config->getVerificationChannels($priority);
         if (!$channels) {
-            return false;
+            throw new waAuthInvalidCredentialsException();
         }
 
-        $result = false;
+        $recipient = array(
+            'id' => $contact->getId(),
+            'phone' => $contact->get('phone', 'default'),
+            'email' => $contact->get('email', 'default')
+        );
+        $recipient['phone'] = waContactPhoneField::cleanPhoneNumber($recipient['phone']);
+
+        if ($phone_transformed) {
+            $transformation_result = $this->auth_config->transformPhone($recipient['phone']);
+            if ($transformation_result['status']) {
+                // actually transformed successfully
+                $recipient['phone'] = $transformation_result['phone'];
+            }
+        }
+
+        $verified = false;
+        $results = array();
         foreach ($channels as $channel_id => $channel) {
             $channel = waVerificationChannel::factory($channel);
-            $result = $channel->validateOnetimePassword($password, array(
-                'recipient' => $contact,
-                'asset_id' => $asset_id
+
+            $res = $channel->validateOnetimePassword($password, array(
+                'recipient' => $recipient,
+                'asset_id' => $asset_id,
+                'check_tries' => array(
+                    'count' => $this->auth_config->getVerifyCodeTriesCount(),
+                    'clean' => true
+                )
             ));
-            if ($result) {
+
+            $results[$channel->getType()] = $res;
+            if ($res['status']) {
+                $verified = true;
                 break;
             }
         }
 
-        return $result;
+        if ($verified) {
+            return true;
+        }
+
+        foreach ($results as $result) {
+            if ($result['details']['error'] === waVerificationChannel::VERIFY_ERROR_OUT_OF_TRIES) {
+                throw new waAuthRunOutOfTriesException(_ws('You have run out of available attempts. Please request a new one-time password.'));
+            }
+        }
+
+        throw new waAuthInvalidCredentialsException();
 
     }
 
@@ -660,7 +757,7 @@ class waAuth implements waiAuth
         if (!is_scalar($string)) {
             return false;
         }
-        $validator = new waEmailValidator();
+        $validator = new waEmailValidator(array('required'=>true));
         return $validator->isValid((string)$string);
     }
 
@@ -681,7 +778,8 @@ class waAuth implements waiAuth
      */
     protected function _authByCookie()
     {
-        if ($this->getOption('remember_enabled') && $token = waRequest::cookie('auth_token')) {
+        $remember_enabled = $this->auth_config->getRememberMe();
+        if ($remember_enabled && $token = waRequest::cookie('auth_token')) {
             $model = new waContactModel();
             $response = waSystem::getInstance()->getResponse();
             $id = substr($token, 15, -15);
@@ -716,7 +814,7 @@ class waAuth implements waiAuth
     }
 
     /**
-     * @param $user_info
+     * @param ArrayAccess|array $user_info
      * @return string
      */
     public function getToken($user_info)
@@ -727,8 +825,8 @@ class waAuth implements waiAuth
 
     /**
      * Clear all auth tokens in storage and cookies
-     *
      * @return void
+     * @throws waException
      */
     public function clearAuth()
     {
@@ -742,6 +840,16 @@ class waAuth implements waiAuth
         }
     }
 
+    /**
+     * Check if current authorization information in session is actual (correct, consistent) for this contact (represented by $data)
+     *
+     * NOTICE: if auth-info is not correct (broken, inconsistent) - clear auth-info from session
+     *
+     * @param ArrayAccess|array $data
+     * @return bool
+     * @throws waAuthException
+     * @throws waException
+     */
     public function checkAuth($data = null)
     {
         if ($auth_info = $this->isAuth()) {
@@ -753,6 +861,11 @@ class waAuth implements waiAuth
         return true;
     }
 
+    /**
+     * Update current authorization information in session by contact info (represented as associative array $data)
+     * @param array $data
+     * @return mixed|void
+     */
     public function updateAuth($data)
     {
         wa()->getStorage()->set('auth_user', $this->getAuthData($data));
@@ -782,7 +895,12 @@ class waAuth implements waiAuth
 
     protected function initLoginFieldIds()
     {
-        $this->options['login_field_ids'] = $this->auth_config->getLoginFieldIds();
+        $this->options['login_field_ids'] = array();
+
+        if ($this->auth_config != null) {
+            $this->options['login_field_ids'] = $this->auth_config->getLoginFieldIds();
+        }
+
         /*
         // backend case
         if ($this->env === 'backend') {

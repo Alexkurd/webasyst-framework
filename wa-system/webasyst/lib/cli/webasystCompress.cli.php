@@ -464,7 +464,12 @@ HELP;
                 unset($token);
             }
 
+            $skip = array();
+
             foreach ($tokens as $id => $token) {
+                if (isset($skip[$id])) {
+                    continue;
+                }
                 if (is_array($token)) {
                     if (in_array($token[0], $list)) {
                         if ($result) {
@@ -479,6 +484,23 @@ HELP;
                         $result = false;
                         $this->tracef("\tPHP short open tag not allowed on line %d", $token[2]);
                     } elseif (($token[0] === T_STRING) && !in_array($token[1], array('true', 'false', 'null'), true)) {
+                        $next_token = $tokens[$id + 1];
+                        if (is_array($next_token) && ($next_token[0] === T_DOUBLE_COLON)) {
+                            $next_token = $tokens[$id + 2];
+                            if (is_array($next_token) && ($next_token[0] === T_STRING)) {
+                                $constant = "{$token[1]}::{$next_token[1]}";
+                                if (!defined($constant)) {
+                                    if ($result) {
+                                        $this->tracef("\nERROR encountered in config file %s:", $name);
+                                    }
+                                    $result = false;
+                                    $this->tracef("\tUndefined constant '%s' on line %d", $constant, $token[2]);
+                                }
+                                $skip[$id + 1] = true;
+                                $skip[$id + 2] = true;
+                                continue;
+                            }
+                        }
                         if ($result) {
                             $this->tracef("\nERROR encountered in config file %s:", $name);
                         }
@@ -591,6 +613,8 @@ HELP;
             );
             $sniffer->setAllowedFileExtensions($extensions);
         }
+
+        $this->tracef('INFO: CodeSniffer version %s', PHP_CodeSniffer::VERSION);
 
         if (is_array($files) === false) {
             $files = array($files);
@@ -800,6 +824,8 @@ HELP;
                                 'shop_settings',
                                 'importexport',
                                 'export_profile',
+                                'printforms',
+                                'emailprintform',
                             )
                         );
                         break;
@@ -813,6 +839,7 @@ HELP;
                                 'services_by_type',
                                 'type',
                                 'multi_curl',
+                                'sync',
                             )
                         );
                         break;
@@ -823,6 +850,7 @@ HELP;
                                 'type',
                                 'offline',
                                 'discount',
+                                'partial_refund',
                             )
                         );
                         break;
@@ -927,6 +955,7 @@ HELP;
         switch ($this->type) {
             case 'plugin':
                 $namespace = waRequest::param('prefix', sprintf('%s_%s', $this->app_id, $this->extension_id));
+                $namespace = preg_replace('@wa-plugins/(shipping|payment)@', 'wa_$1', $namespace);
                 $deprecated = 'lib/config/plugin.sql';
                 break;
             case 'app':
@@ -1034,7 +1063,13 @@ HELP;
 
                 if (is_array($requirements)) {
                     if (!version_compare($version, $requirements['version'], $requirements['operator'])) {
-                        $this->tracef("PHP %s file syntax check\t SKIPPED: Requirement NOT satisfied [%s%s%s])", $version, $version, $requirements['operator'], $requirements['version']);
+                        $this->tracef(
+                            "PHP %s file syntax check\t SKIPPED: Requirement NOT satisfied [%s%s%s])",
+                            $version,
+                            $requirements['version'],
+                            $requirements['operator'],
+                            $version
+                        );
                         continue;
                     }
                 }
@@ -1164,7 +1199,7 @@ HELP;
                                 $next_id = $id;
                                 do {
                                     $next = ifset($tokens, ++$next_id, array());
-                                } while (ifset($next[0]) != T_STRING);
+                                } while (!is_array($next) || (ifset($next[0]) != T_STRING));
 
                                 if (is_array($next) && isset($next[1])) {
                                     if (!isset($info['classes'][$next[1]])) {
@@ -1281,15 +1316,21 @@ HELP;
         $extensions = array_diff(
             $extensions,
             array(
+                'Core',
+                'pcre',
+                'session',
                 'standard',
+                'tokenizer',
                 'SPL',
-                'iconv',
                 'date',
+                'iconv',
+                'libxml',
+                'dom',
+                'json',
                 'gettext',
                 'mbstring',
                 'mysql',
                 'mysqli',
-                'tokenizer',
             )
         );
         $functions = array();
@@ -1382,7 +1423,7 @@ HELP;
         } else {
             if (class_exists('waLog')) {
                 waLog::log(
-                    sprintf("Error while create checksum file [%d] %s at", strlen(basename($path)), $path, __METHOD__)
+                    sprintf("Error while create checksum file [%d] %s at %s", strlen(basename($path)), $path, __METHOD__)
                 );
             }
             throw new waException('Error while create checksum file', 500);

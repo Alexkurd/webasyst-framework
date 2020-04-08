@@ -16,10 +16,26 @@ return array(
         'token' => array('varchar', 32, 'null' => 0),
         'scope' => array('text', 'null' => 0),
         'create_datetime' => array('datetime', 'null' => 0),
+        'last_use_datetime' => array('datetime'),
         'expires' => array('datetime'),
         ':keys' => array(
             'PRIMARY' => 'token',
             'contact_client' => array('contact_id', 'client_id', 'unique' => 1),
+        ),
+    ),
+    'wa_push_subscribers' => array(
+        'id' => array('int', 11, 'null' => 0, 'autoincrement' => 1),
+        'provider_id' => array('varchar', 64, 'null' => 0),
+        'domain' => array('varchar', 255, 'null' => 0),
+        'create_datetime' => array('datetime', 'null' => 0),
+        'contact_id' => array('int', 11), // optional (eg. for frontend users)
+        'subscriber_data' => array('text', 'null' => 0),
+        ':keys' => array(
+            'PRIMARY' => 'id',
+            'provider_id' => 'provider_id',
+            'domain' => 'domain',
+            'contact_id' => 'contact_id',
+            'create_datetime' => 'create_datetime',
         ),
     ),
     'wa_announcement' => array(
@@ -287,6 +303,7 @@ return array(
         'code' => array('varchar', 8, 'null' => 0),
         'name' => array('varchar', 255, 'null' => 0),
         'fav_sort' => array('int', 11),
+        'region_center' => array('varchar', 255),
         ':keys' => array(
             'PRIMARY' => array('country_iso3', 'code'),
         ),
@@ -369,6 +386,7 @@ return array(
         'name' => array('varchar', 64, 'null' => 0),
         'value' => array('text'),
         'expires' => array('datetime'), // IF NULL asset never expires
+        'tries' => array('int', 11, 'null' => 0, 'default' => 0),    // How may validation tries already done
         ':keys' => array(
             'PRIMARY' => 'id',
             'channel_address_name' => array('channel_id', 'address', 'contact_id', 'name', 'unique' => 1),

@@ -1,4 +1,4 @@
-{$_title = "[s`General settings`] — {$wa->accountName()}"}
+{$_title = "[s`General settings`] — {$wa->accountName(false)}"}
 <div class="s-general-settings-page blank block double-padded" id="s-general-settings-page">
     <h1 class="s-page-header">[s`General settings`]</h1>
     <div class="s-general-settings-fields-block">
@@ -18,7 +18,7 @@
                     </div>
                 </div>
 
-                {* WEBASYTE ADDRESS *}
+                {* WEBASYST ADDRESS *}
                 <div class="field">
                     <div class="name">
                         <label for="config-url">[s`Website address`]</label>
@@ -67,6 +67,9 @@
                     <div class="value">
                         <input type="button" class="js-clear-cache button gray" value="[s`Clear cache`]">
                         <i class="icon16 loading js-cache-loading" style="display: none;"></i>
+                    </div>
+                    <div class="value hint">
+                        [`Cache is temporary data that help reduce extensive load on your server. Clear cache to update those data, if you have encountered a malfunction.`]
                         <br><br>
                     </div>
                 </div>
@@ -88,7 +91,18 @@
                     <div class="name">
                         [s`Webasyst version`]
                     </div>
-                    <div class="value no-shift">{$version}</div>
+                    <div class="value no-shift">{$framework_version}</div>
+                </div>
+
+                {* PHP version *}
+                <div class="field">
+                    <div class="name">
+                        [s`PHP version`]
+                    </div>
+                    <div class="value no-shift">{$php_version}</div>
+                    {if !$is_good_php_version}
+                        <div class="value no-shift bold">[`Webasyst is moving to PHP versions 5.6 and higher.`]</div>
+                    {/if}
                 </div>
             </div>
 

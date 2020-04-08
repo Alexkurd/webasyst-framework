@@ -35,6 +35,13 @@ class waDomainAuthConfig extends waAuthConfig
         ''
     );
 
+    /**
+     * Map of that ensure<something>Consistency methods that had been called already
+     * Call every "heavy" ensure<something>Consistency method on demand and only 1 time
+     * @var $array
+     */
+    protected $ensure_consistency;
+
     protected $auth_adapters;
 
     /**
@@ -45,7 +52,7 @@ class waDomainAuthConfig extends waAuthConfig
     {
         $this->domain = $domain;
 
-        $alias = wa()->getRouting()->isAlias($domain);
+        $alias = $this->getRouting()->isAlias($domain);
         if ($alias) {
             $this->original_domain = $alias;
         } else {
@@ -70,6 +77,9 @@ class waDomainAuthConfig extends waAuthConfig
      */
     public static function factory($domain = null)
     {
+        if (waConfig::get('is_template')) {
+            return null;
+        }
         if (!$domain) {
             $domain = wa()->getRouting()->getDomain(null, true, false);
         }
@@ -81,24 +91,56 @@ class waDomainAuthConfig extends waAuthConfig
             $config = new self($domain);
             // orders matter to prevent waAuth <-> self infinitive recursion
             self::$static_cache['instances'][$domain] = $config;
-            $config->ensureConsistency();
+
+            // TODO: optimize this call
+            $config->ensureVerificationChannelIdsConsistency();
+
+            $config->ensureSignupNotifyConsistency();
+
         }
         return self::$static_cache['instances'][$domain];
     }
 
-    public function getDomain()
+    /**
+     * Get current domain with or not 'Internationalized Domain Names' converting (Punycode)
+     *
+     * Domain is technical entity.
+     * By domain saved routes in routes.php config
+     * So by default getDomain get raw domain (without IDN converting)
+     *
+     * @param bool $idn_convert. Default is FALSE
+     * @return string|null
+     */
+    public function getDomain($idn_convert = false)
     {
-        return $this->domain;
+        return $idn_convert ? waIdna::dec($this->domain) : $this->domain;
     }
 
-    public function getOriginalDomain()
+    /**
+     * Get original domain (cause getDomain may be mirror)
+     * with or not 'Internationalized Domain Names' converting (Punycode)
+     *
+     * Domain is technical entity.
+     * By domain saved routes in routes.php config
+     * So by default getDomain get raw domain (without IDN converting)
+     *
+     * @param bool $idn_convert. Default is FALSE
+     * @return string|null
+     */
+    public function getOriginalDomain($idn_convert = false)
     {
-        return $this->original_domain;
+        return $idn_convert ? waIdna::dec($this->original_domain) : $this->original_domain;
     }
 
+    /**
+     * Get site url - how looks like main entry point of site
+     * It is domain itself but IDN converting is TRUE, cause siteUrl is application entity
+     * it use in email/sms messages and UI views
+     * @return string|null
+     */
     public function getSiteUrl()
     {
-        return $this->getDomain();
+        return $this->getDomain(true);
     }
 
     /**
@@ -267,6 +309,7 @@ class waDomainAuthConfig extends waAuthConfig
     }
 
     /**
+     * Placeholder for input 'login' for Login form
      * @return string
      */
     public function getLoginPlaceholder()
@@ -274,10 +317,6 @@ class waDomainAuthConfig extends waAuthConfig
         return $this->getScalarValue('login_placeholder', _ws('Email'));
     }
 
-    public function setLoginPlaceholder($placeholder)
-    {
-        $this->setScalarValue('login_placeholder', $placeholder);
-    }
 
     /**
      * @return bool
@@ -419,7 +458,7 @@ class waDomainAuthConfig extends waAuthConfig
 
         $endpoints = array();
         $auth_apps = $this->getAuthApps();
-        $routing = wa()->getRouting();
+        $routing = $this->getRouting();
         $routes = $this->getAuthRoutes();
 
         $old_route = $routing->getRoute();
@@ -503,6 +542,7 @@ class waDomainAuthConfig extends waAuthConfig
                 'login_captcha'             => array('login'),
                 'login_placeholder'         => array('login'),
                 'login_caption'             => array('login'),
+                'password_placeholder'      => array('signup'),
                 'signup_confirm'            => array('signup'),
                 'signup_notify'             => array('signup'),
                 'signup_captcha'            => array('signup'),
@@ -512,7 +552,8 @@ class waDomainAuthConfig extends waAuthConfig
                 'params'                    => array('signup'),
                 'used_auth_methods'         => array('login', 'signup'),
                 'priority_auth_method'      => array('login', 'signup'),
-                'can_login_by_contact_login' => array('login')
+                'can_login_by_contact_login' => array('login'),
+                'phone_transform_prefix'     => array('signup', 'login')
             );
             $methods = array();
             foreach ($keys as $k => $nss) {
@@ -567,7 +608,13 @@ class waDomainAuthConfig extends waAuthConfig
 
     public function commit()
     {
-        $this->ensureConsistency();
+        // TODO: optimize this call
+        $this->ensureVerificationChannelIdsConsistency();
+
+        $this->ensureFieldsConsistency(true);
+
+        $this->ensureSignupNotifyConsistency();
+
         // It must be here
         $this->syncOldConfirmEmailParam($this->getSignUpConfirm());
         return $this->commitIntoFile();
@@ -653,21 +700,16 @@ class waDomainAuthConfig extends waAuthConfig
 
         $url = $this->buildUrl($url, is_array($params) ? ifset($params['get']) : null);
 
+        // Convert international domain names
+        if ($absolute) {
+            $url = waIdna::dec($url);
+        }
+
         if ($new_route !== null) {
             $routing->setRoute($old_route, $old_domain);
         }
 
         return $url;
-    }
-
-    /**
-     * TODO: move part of this method to parent class
-     */
-    protected function ensureConsistency()
-    {
-        $this->ensureVerificationChannelIdsConsistency();
-        $this->ensureFieldsConsistency();
-        $this->ensureSignupNotifyConsistency();
     }
 
     /**
@@ -679,7 +721,7 @@ class waDomainAuthConfig extends waAuthConfig
 
         $channel_ids = $this->getVerificationChannelIds();
 
-        $vcm = new waVerificationChannelModel();
+        $vcm = $this->getVerificationChannelModel();
         $channels = $vcm->getChannels($channel_ids);
 
         $types = array();   // <type> => count
@@ -698,12 +740,44 @@ class waDomainAuthConfig extends waAuthConfig
         $this->setArrayValue('verification_channel_ids', $channel_ids);
     }
 
-    protected function ensureFieldsConsistency()
+    /**
+     * Ensure that array of fields in config is consistent:
+     *  - there are not unavailable fields
+     *  - array of fields is not empty
+     *  - email/phone existing and required if proper channel is activated
+     *
+     * Call only one time for instance unless $force passed
+     *
+     * @param bool $force
+     */
+    protected function ensureFieldsConsistency($force = false)
     {
+        if (!$force && !empty($this->ensure_consistency['fields'])) {
+            return;
+        }
+
+        $this->ensure_consistency['fields'] = true;
+
         $used_auth_methods = $this->getUsedAuthMethods();
 
-        $fields = $this->getFields();
+        // load available fields
         $this->loadAvailableFields();
+
+        // load default fields
+        $this->loadDefaultFields();
+        $config_fields = $this->getArrayValue('fields');
+
+        $fields = array();
+        foreach ($config_fields as $field_id => $params) {
+            if (!is_scalar($field_id)) {
+                continue;
+            }
+            if (wa_is_int($field_id)) { // separator
+                $fields[] = '';
+                continue;
+            }
+            $fields[$field_id] = $params;
+        }
 
         // Throw away not available fields
         $changed = false;
@@ -713,11 +787,11 @@ class waDomainAuthConfig extends waAuthConfig
                 $changed = true;
             }
         }
+
         // Save updated fields (with now available fields)
         if ($changed) {
             $this->setArrayValue('fields', $fields);
         }
-
 
         $sms_used = in_array(self::AUTH_METHOD_SMS, $used_auth_methods, true);
         $email_used = in_array(self::AUTH_METHOD_EMAIL, $used_auth_methods, true);
@@ -802,23 +876,8 @@ class waDomainAuthConfig extends waAuthConfig
      */
     public function getFields()
     {
-        // load default fields if needed
-        $this->loadDefaultFields();
-        $config_fields = $this->getArrayValue('fields');
-
-        $fields = array();
-        foreach ($config_fields as $field_id => $params) {
-            if (!is_scalar($field_id)) {
-                continue;
-            }
-            if (wa_is_int($field_id)) { // separator
-                $fields[] = '';
-                continue;
-            }
-            $fields[$field_id] = $params;
-        }
-
-        return $fields;
+        $this->ensureFieldsConsistency();
+        return $this->getArrayValue('fields');
     }
 
     /**
@@ -886,8 +945,6 @@ class waDomainAuthConfig extends waAuthConfig
             $config_fields[$field_id] = $field;
         }
 
-        $this->loadAvailableFields();
-
         $this->setArrayValue('fields', $config_fields);
     }
 
@@ -950,7 +1007,6 @@ class waDomainAuthConfig extends waAuthConfig
 
     /**
      * Load all available fields
-     * @throws waException
      */
     protected function loadAvailableFields()
     {
@@ -1071,5 +1127,77 @@ class waDomainAuthConfig extends waAuthConfig
     public function setCanLoginByContactLogin($enabled)
     {
         $this->setBoolValue('can_login_by_contact_login', $enabled);
+    }
+
+    /**
+     * Get options for transform phone(s) prefix
+     * @param array
+     * @return array
+     */
+    public function getPhoneTransformPrefix()
+    {
+        return $this->getArrayValue('phone_transform_prefix');
+    }
+
+    /**
+     * @param string|string[] $options
+     */
+    public function setPhoneTransformPrefix($options)
+    {
+        $input_code = ifset($options['input_code']);
+        $input_code = is_scalar($input_code) && strlen((string)$input_code) ? (string)$input_code : null;
+
+        $output_code = ifset($options['output_code']);
+        $output_code = is_scalar($output_code) && strlen((string)$output_code) ? (string)$output_code : null;
+
+        if (wa_is_int($input_code) && wa_is_int($output_code)) {
+            $this->setArrayValue('phone_transform_prefix', array(
+                'input_code' => $input_code,
+                'output_code' => $output_code
+            ));
+        } else {
+            $this->unsetKey('phone_transform_prefix');
+        }
+
+    }
+
+    /**
+     * Transform phone by rules for specified (or all) domains
+     * @param $phone
+     * @param bool $is_reverse
+     * @param null|array $domains - NULL - for all domains, otherwise for specified domains
+     * @return array
+     * @throws waException
+     */
+    public static function transformPhonePrefixForDomains($phone, $is_reverse = false, $domains = null)
+    {
+        if ($domains !== null) {
+            $domains = waUtils::toStrArray($domains);
+            $domains = array_fill_keys($domains, true);
+        }
+
+        // auth config by all domains
+        $auth_config = wa()->getConfig()->getAuth();
+
+        // collect options for phone transformation for all domains
+        $domain_transform_options = array();
+        foreach ($auth_config as $domain => $config) {
+            if ($domains === null || !empty($domains[$domain])) {
+                $config = is_array($config) ? $config : array();
+                $phone_transform_prefix = ifset($config['phone_transform_prefix']);
+                $phone_transform_prefix = is_array($phone_transform_prefix) ? $phone_transform_prefix : array();
+                $domain_transform_options[$domain] = $phone_transform_prefix;
+            }
+        }
+
+        // apply transformations and collect results
+        $results = array();
+        foreach ($domain_transform_options as $domain => $options) {
+            $options['is_reverse'] = $is_reverse;
+            $result = parent::transformPhonePrefix($phone, $options);
+            $results[$domain] = $result;
+        }
+
+        return $results;
     }
 }

@@ -67,6 +67,7 @@ class waModel
     /**
      * @param string $type
      * @param bool $writable
+     * @throws waDbException|waException
      */
     public function __construct($type = null, $writable = false)
     {
@@ -81,6 +82,7 @@ class waModel
     /**
      * Get meta description of the table and generate fields array
      * @return array
+     * @throws waDbException|waException
      */
     public function getMetadata()
     {
@@ -106,6 +108,7 @@ class waModel
     /**
      * Update and return description of table columns (like getMetadata()), bypassing all caches.
      * @return array
+     * @throws waDbException
      */
     public function clearMetadataCache()
     {
@@ -122,6 +125,7 @@ class waModel
      * description file.
      *
      * @return array
+     * @throws waDbException|waException
      */
     public function getEmptyRow()
     {
@@ -136,6 +140,10 @@ class waModel
         return $result;
     }
 
+    /**
+     * @return array|mixed
+     * @throws waDbException|waException
+     */
     private function getFields()
     {
         return $this->describe();
@@ -175,6 +183,7 @@ class waModel
      * @param string $table
      * @param bool $keys
      * @return array
+     * @throws waDbException
      */
     public function describe($table = null, $keys = false)
     {
@@ -360,7 +369,7 @@ class waModel
     /**
      * Updates table record with specified value of model's id field value.
      *
-     * @param string|int $id The value of model's id field, which is searched for across all table records to replace
+     * @param string|int|array $id The value of model's id field, which is searched for across all table records to replace
      *     values of fields specified in $data parameter in the found record.
      * @param array $data Associative array of new values for specified fields of the found record.
      * @param string $options Optional key words for SQL query UPDATE: LOW_PRIORITY or IGNORE.
@@ -849,7 +858,7 @@ class waModel
      *
      * One field mode:
      *
-     * @param string Field name.
+     * @param string|array Field name or array field name => value
      * @param mixed|array Field value or zero-based array of values.
      * @param bool|string Boolean flag requiring to return data of all found records
      *     or name of field whose values in all found entries must be used as keys of result array.
@@ -1098,10 +1107,76 @@ class waModel
         return true;
     }
 
+    /**
+     * @param array $schema - db.php config schema
+     *   Schema is associative array for each table with name of table as a key and table-schema as value
+     *    <table_name> => array(
+             ...
+     *    )
+     * See db.php format
+     */
     public function createSchema($schema)
     {
         $schema = $this->formatSchema($schema);
         $this->adapter->createSchema($schema);
+    }
+
+    /**
+     * Add column by db.php schema for current table
+     *
+     * @param string $column
+     *
+     * @param string[][] $db_schema - db.php config schema
+     *   Schema is associative array for each table with name of table as a key and table-schema as value
+     *    <table_name> => array(
+     *      ...
+     *    )
+     * See db.php format
+     *
+     * @param null|string $after_column
+     *
+     * @param null|string $table - name of table for which need add this column.
+     *   If null - get table from model $this->table
+     *   Current table must exists in passed $db_schema
+     *
+     *
+     */
+    public function addColumn($column, $db_schema, $after_column = null, $table = null)
+    {
+        $schema = $this->formatSchema($db_schema);
+        $table = $table !== null ? $table : $this->table;
+        if (isset($schema[$table])) {
+            $this->adapter->addColumn($table, $column, $schema[$table], $after_column);
+        }
+    }
+
+    /**
+     * modify column by db.php schema for current table
+     *
+     * @param string $column
+     *
+     * @param string[][] $db_schema - db.php config schema
+     *   Schema is associative array for each table with name of table as a key and table-schema as value
+     *    <table_name> => array(
+     *      ...
+     *    )
+     * See db.php format
+     *
+     * @param null|string $after_column
+     *
+     * @param null|string $table - name of table for which need add this column.
+     *   If null - get table from model $this->table
+     *   Current table must exists in passed $db_schema
+     *
+     *
+     */
+    public function modifyColumn($column, $db_schema, $after_column = null, $table = null, $emulate = false)
+    {
+        $schema = $this->formatSchema($db_schema);
+        $table = $table !== null ? $table : $this->table;
+        if (isset($schema[$table])) {
+            return $this->adapter->modifyColumn($table, $column, $schema[$table], $after_column, $emulate);
+        }
     }
 
     protected function remapIds($id)

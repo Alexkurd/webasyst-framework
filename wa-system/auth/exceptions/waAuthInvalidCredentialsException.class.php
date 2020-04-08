@@ -1,6 +1,6 @@
 <?php
 
-class waAuthInvalidCredentialsException extends waException
+class waAuthInvalidCredentialsException extends waAuthException
 {
     public function __construct($message = '', $code = 500, $previous = null)
     {

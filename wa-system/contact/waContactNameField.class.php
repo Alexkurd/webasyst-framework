@@ -99,13 +99,15 @@ class waContactNameField extends waContactStringField
 
     public function set(waContact $contact, $value, $params = array(), $add = false)
     {
-        $value = preg_replace('~\s+~', ' ', trim($value));
-        if ($contact['is_company']) {
-            return $value;
-        }
+        $value = preg_replace('~\s+~u', ' ', trim($value));
 
         if ($contact['name'] == $value) {
             return $contact['name'];
+        }
+
+        if ($contact['is_company']) {
+            $contact['company'] = $value;
+            return $value;
         }
 
         $contact['firstname'] = '';

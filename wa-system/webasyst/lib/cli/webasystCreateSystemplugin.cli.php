@@ -13,13 +13,14 @@ class webasystCreateSystempluginCli extends webasystCreateCliController
         $help = <<<HELP
 Usage: php wa.php createSystemPlugin type plugin_id [parameters]
     type - Plugin type: shipping, payment, or sms
-    plugin_id - Plugin id (string in lower case) 
+    plugin_id - Plugin ID (string in lower case)
 Optional parameters:
-    -name (Plugin name; if comprised of several words, enclose in quotes; e.g., 'My plugin')
-    -version (Plugin version; e.g., 1.0.0)
-    -vendor (Numerical vendor id)
-    -settings (Supports user settings)
-    
+    -name (plugin name; if comprised of several words, enclose in quotes; e.g., 'My plugin')
+    -version (plugin version; e.g., 1.0.0)
+    -vendor (numerical vendor id)
+    -settings (supports user settings)
+    -db (supports plugin's database tables)
+
     -prototype (plugin id which will be used as prototype, by default it 'wapattern')
 Example: php wa.php createSystemPlugin shipping myshipping -name 'My shipping' -version 1.0.0 -vendor 123456
 HELP;
@@ -74,12 +75,32 @@ HELP;
     }
 
 
-    protected function showReport($data = array())
+    protected function showReport($data = array(), $params = array())
     {
-        echo <<<REPORT
+        $report = <<<REPORT
 Plugin with id "$this->plugin_id" created!
 
 REPORT;
+        $report .= <<<REPORT
+Useful commands:
+    # generate plugin's locale files
+    php wa.php locale wa-plugins/{$this->type}{$this->app_id}
+REPORT;
+        if (isset($params['db'])) {
+            $report .= <<<REPORT
+
+    # generate plugin's database description file db.php
+    php wa.php generateDb wa-plugins/{$this->type}{$this->plugin_id}
+
+REPORT;
+
+        }
+        $report .= "\n\n".<<<REPORT
+    #check & compress plugin code for store
+    php wa.php compress wa-plugins/{$this->type}{$this->plugin_id}
+REPORT;
+        echo $report;
+        var_export($data);
     }
 
     protected function createClass($file)
@@ -135,12 +156,20 @@ REPORT;
                 if (isset($params['settings'])) {
                     $structure['lib/config/settings.php'] = array();
                 }
+                #db
+                if (isset($params['db'])) {
+                    $structure['lib/config/db.php'] = array();
+                }
                 $structure['templates/payment.html'] = 'templates/payment.html';
                 break;
             case 'shipping':
                 #settings
                 if (isset($params['settings'])) {
                     $structure['lib/config/settings.php'] = array();
+                }
+                #db
+                if (isset($params['db'])) {
+                    $structure['lib/config/db.php'] = array();
                 }
                 break;
             case 'sms':

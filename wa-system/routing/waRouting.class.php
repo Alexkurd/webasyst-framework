@@ -93,6 +93,9 @@ class waRouting
             } else {
                 $key = true;
             }
+            if (!isset($r['parsed_url_params']) && preg_match_all('/<([a-z_]+):?([^>]*)?>/ui', $r['url'], $match, PREG_OFFSET_CAPTURE|PREG_SET_ORDER)) {
+                $r['parsed_url_params'] = $match;
+            }
             if ($app_id && empty($r['app'])) {
                 $r['app'] = $app_id;
             }
@@ -167,7 +170,7 @@ class waRouting
             }
             if (isset($this->routes[$domain])) {
                 $this->domain = $domain;
-                if (wa()->getEnv() == 'frontend') {
+                if (wa()->getEnv() == 'frontend' && !waRequest::param('no_domain_www_redirect')) {
                     $url = 'http'.(waRequest::isHttps()? 's' : '').'://';
                     $url .= $this->getDomainUrl($domain).'/'.wa()->getConfig()->getRequestUrl();
                     wa()->getResponse()->redirect($url, 301);
@@ -288,9 +291,15 @@ class waRouting
         return $_page_routes[$app_id];
     }
 
-
     protected function getAppRoutes($app, $route = array(), $dispatch = false)
     {
+        if (!$dispatch) {
+            $cache_key = md5(serialize($route));
+            $cache = new waRuntimeCache('approutes/'.$app.'/'.$cache_key, -1, 'webasyst');
+            if ($cache->isCached()) {
+                return $cache->get();
+            }
+        }
         $routes = waSystem::getInstance($app, null, $dispatch)->getConfig()->getRouting($route, $dispatch);
         $routes = $this->formatRoutes($routes, $app);
         if ($dispatch && wa($app)->getConfig()->getInfo('pages') && $app != 'site') {
@@ -298,6 +307,8 @@ class waRouting
             if ($page_routes) {
                 $routes = array_merge($page_routes, $routes);
             }
+        } else if (isset($cache)) {
+            $cache->set($routes);
         }
         return $routes;
     }
@@ -367,7 +378,8 @@ class waRouting
                             }
                         }
                     }
-                    wa()->getResponse()->redirect($r['redirect'], 302);
+                    $redirect_code = (!empty($r['code']) && $r['code'] == 302) ? 302 : 301;
+                    wa()->getResponse()->redirect($r['redirect'], $redirect_code);
                 } elseif (isset($r['static_content'])) {
                     $response = wa()->getResponse();
                     switch (ifset($r['static_content_type'])){
@@ -449,7 +461,7 @@ class waRouting
             }
         }
 
-        if (!$this->route || !$check_current_route || $this->route['app'] != $app ||
+        if (!$this->route || !is_array($this->route) || !$check_current_route || $this->route['app'] != $app ||
             ($domain_url && $domain_url != $this->getDomain()) ||
             ($route_url && $this->route['url'] != $route_url) ||
         (isset($this->route['module']) && isset($params['module']) && $this->route['module'] != $params['module'])
@@ -505,9 +517,9 @@ class waRouting
                         $j++;
                     }
                     $u = $app_r['url'];
-                    if (preg_match_all('/<([a-z_]+):?([^>]*)?>/ui', $u, $match, PREG_OFFSET_CAPTURE|PREG_SET_ORDER)) {
+                    if (isset($app_r['parsed_url_params'])) {
                         $offset = 0;
-                        foreach ($match as $m) {
+                        foreach ($app_r['parsed_url_params'] as $m) {
                             $v = $m[1][0];
                             if (isset($params[$v])) {
                                 $u = substr($u, 0, $m[0][1] + $offset).$params[$v].substr($u, $m[0][1] + $offset + strlen($m[0][0]));
@@ -578,9 +590,7 @@ class waRouting
 
     public static function clearUrl($url)
     {
-        $url = preg_replace('/\.?\*$/i', '', $url);
-        $url = str_replace('/?', '/', $url);
-        return $url;
+        return preg_replace('~(?<=/)\?|\.?\*$~i', '', $url);
     }
 
     public static function getDomainUrl($domain, $absolute = true)

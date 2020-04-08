@@ -18,11 +18,15 @@ var WaBackendLogin = ( function($) {
 
         that.initCancelButton();
 
+        // Init 'button' for request onetime password
+        // On success request new password will be called that.onSentOnetimePassword
         that.initOnetimePasswordLink({
             $link: that.$wrapper.find('.wa-request-onetime-password-button'),
             $loading: that.$wrapper.find('.wa-request-onetime-password-button-loading')
         });
 
+        // Init 'link' for re-request ('sent again') onetime password
+        // On success request new password will be called that.onSentOnetimePassword
         that.initOnetimePasswordLink({
             $link: that.$wrapper.find('.wa-request-onetime-password-link'),
             $loading: that.$wrapper.find('.wa-request-onetime-password-link-loading')
@@ -54,11 +58,12 @@ var WaBackendLogin = ( function($) {
     
     Self.prototype.setupOnetimePasswordView = function () {
         var that = this,
-            $wrapper = that.$wrapper;
+            $wrapper = that.$wrapper,
+            $password = that.getFormField('password');
 
         that.makeInputReadonly('login', false);
 
-        that.turnOffBlock(that.getFormField('password'));
+        that.turnOffBlock($password);
         that.turnOffBlock($wrapper.find('.wa-submit-button-wrapper'));
         that.turnOnBlock($wrapper.find('.wa-request-onetime-password-button-wrapper'));
 
@@ -67,24 +72,34 @@ var WaBackendLogin = ( function($) {
         $wrapper.find('.wa-change-login-link').hide();
         $wrapper.find('.wa-request-onetime-password-link-wrapper').hide();
 
-
-        that.getFormField('password').find('.' + that.classes.message_msg).remove();
+        $password.find('.' + that.classes.message_msg).remove();
 
         that.triggerEvent('wa_auth_form_change_view');
     };
 
+    /**
+     * When onetime password successfully sent to client
+     * It is template, overridden method, that will be called in Parent class
+     * @see Parent
+     * @param data
+     */
     Self.prototype.onSentOnetimePassword = function (data) {
         data = data || {};
 
         var that = this,
-            $wrapper = that.$wrapper;
+            $wrapper = that.$wrapper,
+            $password_block = that.getFormField('password'),
+            $password_input = that.getFormInput('password');
 
 
         // "Disable" login input
         that.makeInputReadonly('login');
 
         // Show password-input to type onetime_password we requested
-        that.turnOnBlock(that.getFormField('password'));
+        that.turnOnBlock($password_block);
+
+        // see Parent.prepareErrorItem for password out_of_tries error in onetime time password mode
+        $password_input.removeAttr('readonly').val('');
 
         // Submit button show
         that.turnOnBlock($wrapper.find('.wa-submit-button-wrapper'));
@@ -115,8 +130,7 @@ var WaBackendLogin = ( function($) {
         $wrapper.find('.wa-request-onetime-password-link-wrapper').hide();
 
         // Message about timeout to re-request onetime_password
-        var $timer_message = that.$wrapper.find('.' + that.classes.message_msg + '[data-name="password"][data-index="timeout"]');
-
+        var $timer_message = that.getInfoMessageItem('password', 'timeout');
 
         // go timer
         that.runTimeoutMessage($timer_message, {
@@ -155,6 +169,26 @@ var WaBackendLogin = ( function($) {
                 $hidden.remove();
             }
         }
+    };
+
+    Self.prototype.onDoneSubmitHandlers = function () {
+        var that = this,
+            handlers = Parent.prototype.onDoneSubmitHandlers.call(that);
+        handlers.redirect = function (redirect_url) {
+            var current_url = window.location.href || '',
+                is_prefix = current_url.indexOf(redirect_url) === 0,
+                has_hash = current_url.indexOf('#') !== -1;
+
+            // absolute redirect_url is prefix for current location.href
+            // and location.href HAS '#'
+            //  => Make a conclusion that all we need it is location.reload()
+            if (is_prefix && has_hash) {
+                window.location.reload();
+            } else {
+                window.location.href = redirect_url;
+            }
+        };
+        return handlers;
     };
 
     return Self;

@@ -184,6 +184,8 @@ class waHtmlControl
 
         $params['class'][] = $type;
 
+        $params['value'] = array_key_exists('value', $params) ? $params['value'] : null;
+
         $original_wrappers = self::getControlWrappers($params);
         self::makeId($params, $name);
         $instance = self::getInstance();
@@ -306,6 +308,28 @@ class waHtmlControl
         return $options;
     }
 
+    /**
+     * @uses waHtmlControl::getInputControl()
+     * @uses waHtmlControl::getIntervalControl()
+     * @uses waHtmlControl::getHiddenControl()
+     * @uses waHtmlControl::getSelectControl()
+     * @uses waHtmlControl::getCheckboxControl()
+     * @uses waHtmlControl::getRadiogroupControl()
+     * @uses waHtmlControl::getTextareaControl()
+     * @uses waHtmlControl::getPasswordControl()
+     * @uses waHtmlControl::getGroupboxControl()
+     * @uses waHtmlControl::getFileControl()
+     * @uses waHtmlControl::getDatetimeControl()
+     * @uses waHtmlControl::getTitleControl()
+     * @uses waHtmlControl::getHelpControl()
+     * @uses waHtmlControl::getContactControl()
+     * @uses waHtmlControl::getContactfieldControl()
+     * @uses waHtmlControl::getCustomControl()
+     * @param string $function_name
+     * @param mixed $args
+     * @return mixed|string
+     * @throws waException
+     */
     public function __call($function_name, $args = null)
     {
         if (preg_match('/^get(\w+)Control$/', $function_name, $matches)) {
@@ -452,7 +476,8 @@ class waHtmlControl
     {
         $control = '';
         $control_name = self::escape($name);
-        $control .= "<input id=\"{$params['id']}\" type=\"text\" name=\"{$control_name}\" ";
+        $field_type = self::escape((string)ifset($params, 'field_type', 'text'));
+        $control .= "<input id=\"{$params['id']}\" type=\"{$field_type}\" name=\"{$control_name}\" ";
         if (isset($params['format_description'])) {
             $params['format_description'] = self::_wp($params['format_description']);
         }
@@ -469,6 +494,13 @@ class waHtmlControl
             'disabled',
             'autocomplete',
             'autofocus',
+            'min',
+            'max',
+            'step',
+            'spellcheck',
+            'multiple', // for field_type='email', as example
+            'autocorrect', // Safari
+            'autocapitalize', // Safari
             'format'             => 'data-regexp',
             'format_description' => 'data-regexp-hint',
         );
@@ -551,7 +583,7 @@ class waHtmlControl
                 }
             };
         setTimeout(function(){
-            CodeMirror.fromTextArea(textarea, $.extend($options, onchange));
+            CodeMirror.fromTextArea(textarea, $.extend({$options}, onchange));
         }, 500);
     }
 </script>
@@ -610,12 +642,14 @@ HTML;
         $options = isset($params['options']) ? (is_array($params['options']) ? $params['options'] : array($params['options'])) : array();
         foreach ($options as $option) {
             ++$id;
+
             $option_value = $option['value'];
             if ($option_value == $value) {
                 $params['checked'] = 'checked';
             } elseif (isset($params['checked'])) {
                 unset($params['checked']);
             }
+
             self::makeId($params, $name, md5($option_value));
             $option_value = self::escape($option_value);
             $control_name = self::escape($name);
@@ -625,7 +659,7 @@ HTML;
                 $option_title = self::escape(self::_wp($option['title'], $params));
                 $control .= ">&nbsp;<label";
                 $control .= self::addCustomParams(array('id' => 'for',), $params);
-                $control .= self::addCustomParams(array('description' => 'title', 'class', 'style',), $option);
+                $control .= self::addCustomParams(array('class', 'style',), $option);
                 $control .= ">{$option_title}</label>\n";
             } else {
                 $control .= ">\n";
@@ -698,19 +732,30 @@ HTML;
             $params['value'] = array();
         }
         self::addNamespace($params, $name);
-        $wrappers = ifempty($params['options_wrapper'], array()) + array(
-                'title_wrapper'       => '&nbsp;%s',
-                'description_wrapper' => '<span class="hint">%s</span>',
-                'control_wrapper'     => '%2$s'."\n".'%1$s'."\n".'%3$s'."\n",
-                'control_separator'   => "<br>",
 
-            );
+        $default_wrapper = array(
+            'title_wrapper'       => '&nbsp;%s',
+            'description_wrapper' => '<span class="hint">%s</span>',
+            'control_wrapper'     => '%2$s'."\n".'%1$s'."\n".'%3$s'."\n",
+            'control_separator'   => "<br>",
+        );
+
+        $options_wrapper = ifempty($params, 'options_wrapper', array());
+
+        $wrappers = $options_wrapper + $default_wrapper;
+
         unset($params['options_wrapper']);
         $params = array_merge($params, $wrappers);
         $checkbox_params = $params;
         if (isset($params['options'])) {
             unset($checkbox_params['options']);
         }
+
+        // Ignore 'custom_title_wrapper' from control for options
+        if (empty($options_wrapper['custom_title_wrapper'])) {
+            unset($checkbox_params['custom_title_wrapper']);
+        }
+
         $id = 0;
         foreach ($options as $option) {
             $checkbox_params['value'] = !empty($option['value']) ? $option['value'] : 1;
@@ -721,6 +766,11 @@ HTML;
             if ($checkbox_params['disabled'] && !empty($option['checked'])) {
                 $checkbox_params['checked'] = true;
             }
+
+            if (!empty($option['data']) && is_array($option['data'])) {
+                $checkbox_params['data'] = $option['data'];
+            }
+            
             $control .= self::getControl(self::CHECKBOX, $option['value'], $checkbox_params);
             if (++$id < count($options)) {
                 $control .= $params['control_separator'];
@@ -746,7 +796,7 @@ HTML;
         self::addNamespace($input_params, $name);
         $input_name = "from";
         $input_params['value'] = $params['value']['from'];
-        $input_params['title'] = 'str_from';
+        $input_params['title'] = ifempty($params, 'control_title', 'from', 'str_from');
 
         $control .= self::getControl(self::INPUT, $input_name, $input_params)."\n";
 
@@ -754,7 +804,7 @@ HTML;
         $input_name = "to";
         self::addNamespace($input_params, $name);
         $input_params['value'] = $params['value']['to'];
-        $input_params['title'] = 'str_to';
+        $input_params['title'] = ifempty($params, 'control_title', 'to', 'str_to');
         $control .= self::getControl(self::INPUT, $input_name, $input_params)."\n";
         return $control;
     }
@@ -868,7 +918,10 @@ HTML;
             'title' => '—',
             'value' => '',
         );
-        $fields = waContactFields::getAll();
+
+        $contact_type = isset($params['contact_type']) ? $params['contact_type'] : 'person';
+
+        $fields = waContactFields::getAll($contact_type);
         foreach ($fields as $field) {
             if ($field instanceof waContactCompositeField) {
                 /**
@@ -914,87 +967,111 @@ HTML;
         $params = array_merge($params, $wrappers);
         $available_days = array();
         $date_params = $params;
+        $date_formatted_params = $params;
         $date_format = waDateTime::getFormat('date');
+        $date_format_map = array(
+            'PHP' => 'JavaScript',
+            'Y'   => 'yy',
+            'd'   => 'dd',
+            'm'   => 'mm',
+        );
+        $js_date_format = str_replace(array_keys($date_format_map), array_values($date_format_map), $date_format);
+
+        $locale = wa()->getLocale();
+        $localization = sprintf("wa-content/js/jquery-ui/i18n/jquery.ui.datepicker-%s.js", $locale);
+        if (!is_readable($localization)) {
+            $localization = '';
+        }
+
         if (isset($params['params']['date'])) {
-            $date_params['style'] = "z-index: 100000;";
+            if (empty($params['multiple'])) {
+                $date_params['style'] = "z-index: 100000;";
+            } else {
+                $date_params['style'] = "display: none;";
+            }
 
             $date_name = preg_replace('@([^\]]+)(\]?)$@', '$1.date_str$2', $name);
             $offset = min(365, max(0, intval(ifset($params, 'params', 'date', 0))));
             $date_params['placeholder'] = waDateTime::getFormatHuman($date_format);
-            $date_params['description'] = _ws('Date');
+
+            if (isset($params['description_date'])) {
+                $date_params['description'] = $this->_wp($params['description_date'], $params);
+            } else {
+                $date_params['description'] = _ws('Date');
+            }
+
 
             $date_params['value'] = ifset($params, 'value', 'date_str', '');
+
 
             $html .= waHtmlControl::getControl(waHtmlControl::INPUT, $date_name, $date_params);
             self::makeId($date_params, $date_name);
 
             $date_name = preg_replace('@([^\]]+)(\]?)$@', '$1.date$2', $name);
-            $date_formatted_params = $params;
-            $date_formatted_params['style'] = "display: none;";
+
             $date_formatted_params['value'] = ifset($params, 'value', 'date', '');
 
-            $html .= waHtmlControl::getControl(waHtmlControl::INPUT, $date_name, $date_formatted_params);
+            $html .= waHtmlControl::getControl(waHtmlControl::HIDDEN, $date_name, $date_formatted_params);
             self::makeId($date_formatted_params, $date_name);
 
+            $calendar_id = $date_params['id'];
 
-            $date_format_map = array(
-                'PHP' => 'JavaScript',
-                'Y'   => 'yy',
-                'd'   => 'dd',
-                'm'   => 'mm',
-            );
-            $js_date_format = str_replace(array_keys($date_format_map), array_values($date_format_map), $date_format);
-            $locale = wa()->getLocale();
-            $localization = sprintf("wa-content/js/jquery-ui/i18n/jquery.ui.datepicker-%s.js", $locale);
-            if (!is_readable($localization)) {
-                $localization = '';
+            if (!empty($params['multiple'])) {
+                $calendar_id .= '_datepicker';
+                $html .= sprintf('<div id="%s"></div>', $calendar_id);
             }
 
         }
 
         $interval_params = $params;
-        if (!empty($params['params']['interval'])) {
+        $intervals = ifempty($params['params']['intervals'], false);
+        if (is_array($intervals)) {
+            $interval_params['options'] = array();
+            foreach ($intervals as $id => $interval) {
+                if (is_array($interval) && isset($interval['from']) && isset($interval['to'])) {
+                    $days = array_filter(ifset($interval['day'], array()));
+                    $days = array_keys($days);
+                    $start_date = ifset($interval['start_date'], false);
+                    $start_timestamp = $start_date ? strtotime($start_date) : 0;
 
-            $intervals = ifempty($params['params']['intervals'], false);
-            if (is_array($intervals)) {
-                $interval_params['options'] = array();
-                foreach ($intervals as $id => $interval) {
-                    if (is_array($interval) && isset($interval['from']) && isset($interval['to'])) {
-                        $days = ifset($interval['day'], array());
-                        $value = sprintf(
-                            '%d:%02d-%d:%02d',
-                            $interval['from'],
-                            ifset($interval['from_m'], 0),
-                            $interval['to'],
-                            ifset($interval['to_m'], 0)
-                        );
-                        $interval_params['options'][$value] = array(
-                            'value' => $value,
-                            'title' => empty($value) ? _ws('Time') : $value,
-                            'data'  => array(
-                                'days'  => array_keys($days),
-                                'value' => $value,
-                            ),
-                        );
-                        $available_days = array_merge(array_keys($days), $available_days);
-                    } else {
-                        $interval_params['options'][$id] = array(
+                    $value = sprintf(
+                        '%d:%02d-%d:%02d',
+                        $interval['from'],
+                        ifset($interval['from_m'], 0),
+                        $interval['to'],
+                        ifset($interval['to_m'], 0)
+                    );
+                    $interval_params['options'][$value] = array(
+                        'value'       => $value,
+                        'title'       => empty($value) ? _ws('Time') : $value,
+                        'description' => $start_date ? $start_date : $value,
+                        'data'        => compact('days', 'value', 'start_date', 'start_timestamp'),
+                    );
+                    $available_days = array_merge($days, $available_days);
+                } else {
+                    $interval_params['options'][$id] = array(
+                        'value' => $id,
+                        'title' => empty($id)?_ws('Time'):$id,
+                        'data'  => array(
+                            'days'  => $interval,
                             'value' => $id,
-                            'title' => empty($id)?_ws('Time'):$id,
-                            'data'  => array(
-                                'days'  => $interval,
-                                'value' => $id,
-                            ),
-                        );
-                        $available_days = array_merge(array_keys($interval), $available_days);
-                    }
+                        ),
+                    );
+                    $available_days = array_merge(array_keys($interval), $available_days);
                 }
-
-                $available_days = array_values(array_unique($available_days));
             }
 
+            $available_days = array_values(array_unique($available_days));
+        }
+
+        if (!empty($params['params']['interval'])) {
             $interval_name = preg_replace('@([^\]]+)(\]?)$@', '$1.interval$2', $name);
-            $interval_params['description'] = _ws('Time');
+            if (isset($params['description_interval'])) {
+                $interval_params['description'] = $this->_wp($params['description_interval'], $params);
+            } else {
+                $interval_params['description'] = _ws('Time');
+            }
+
             if (isset($interval_params['options'])) {
                 $html .= ifset($params['control_separator']);
                 if (!isset($interval_params['options'][null])) {
@@ -1021,91 +1098,192 @@ HTML;
                 $interval_params['id'] = '';
             }
 
+            $holidays = waUtils::jsonEncode(array_values(ifempty($params['params']['holidays'], array())));
+            $workdays = waUtils::jsonEncode(array_values(ifempty($params['params']['workdays'], array())));
+
             $available_days = json_encode($available_days);
             $root_url = wa()->getRootUrl();
+            $multiple = empty($params['multiple']) ? 'false' : 'new Array()';
+            $selected_class = ifset($params, 'params', 'selected', 'ui-state-active');
             $html .= <<<HTML
 <script>
     ( function() {
         'use strict';
-        var id_date = '{$date_params['id']}';
-        var id_date_formatted = '{$date_formatted_params['id']}';
-        var date_input = $('#' + id_date);
-        var date_formatted = $('#' + id_date_formatted);
+        var input_date = $('#{$date_params['id']}');
+        var input_date_formatted = $('#{$date_formatted_params['id']}');
         var interval = '{$interval_params['id']}' ? $('#{$interval_params['id']}') : false;
-        
-        date_input.data('available_days', {$available_days});
+        var multiple_dates = {$multiple};
+        var multiple_dates_formatted = {$multiple};
+        var holidays = {$holidays};
+        var workdays = {$workdays};
 
+        if (multiple_dates !== false){
+            multiple_dates = input_date.val().split(';');
+        }
+        
+        if (multiple_dates_formatted !== false) {
+            multiple_dates_formatted = input_date_formatted.val().split(';');
+        }
+        
+        // remove bad date from hidden input
+        input_date.on('change', function() {
+            if (this.value === '') {
+                input_date_formatted.val('')
+            }
+        });
+        
+        input_date.data('available_days', {$available_days});
+        
+        var intervalAllowed = function(option, timestamp, day, day_type) {
+            
+            var days = option.data('days');
+            if ((typeof(days)) === 'undefined') {
+               days = input_date.data('available_days');
+            }
+            var allowed = null;
+            
+            var start_timestamp = option.data('start_timestamp');
+            if (timestamp && start_timestamp && (timestamp<start_timestamp*1000)) {
+                allowed = false;
+            } else if (day_type==='holiday') {
+                allowed = (days.indexOf(day_type) >= 0);
+            } else if (day_type === 'workday'){
+                allowed = (days.indexOf(day) >= 0)||(days.indexOf(day_type) >= 0);
+            } else {
+                allowed = (days.indexOf(day) >= 0);
+            }
+            
+            
+            return allowed;
+        };
+        
+        var dayType = function(date) {
+            var day_type = null;
+            var date_formatted = $.datepicker.formatDate('yy-mm-dd', date); 
+            if (holidays.indexOf(date_formatted)>=0) {
+                day_type = 'holiday';
+            } else if (workdays.indexOf(date_formatted)>=0) {
+                day_type = 'workday';
+            }
+            return day_type;
+        };
+        
         var initDatePicker = function () {
-            date_input.datepicker({
+            var container = $('#{$calendar_id}'); 
+            container.datepicker({
+                "altField": (multiple_dates === false?('#{$date_formatted_params['id']}'):null),
+                "altFormat": 'yy-mm-dd',
                 "dateFormat": '{$js_date_format}',
                 "minDate": {$offset},
+                "numberOfMonths": (multiple_dates === false ? 1 : [2,3]),
                 "onSelect": function (dateText) {
-                    var d = date_input.datepicker('getDate');
-                    date_input.val(dateText);
-                    date_formatted.val($.datepicker.formatDate('yy-mm-dd', d));
-                    if (d && interval && interval.length) {
-                        /** @var int day week day (starts from 0) */
-                        var day = (d.getDay() + 6) % 7;
-                        /**
-                         * filter select by days
-                         */
-                        var value = typeof(interval.val()) !== 'undefined';
-                        var matched = null;
-                        interval.find('option').each(function () {
-                            /**
-                             * @this HTMLOptionElement
-                             */
-                            var option = $(this);
-                            var disabled = (option.data('days').indexOf(day) === -1) ? 'disabled' : null;
-                            option.attr('disabled', disabled);
-                            if (disabled) {
-                                if (this.selected) {
-                                    value = false;
-                                }
-                            } else {
-                                matched = this;
-                                if (!value) {
-                                    this.selected = true;
-                                    value = !!this.value;
-                                    if (typeof(interval.highlight) === 'function') {
-                                        interval.highlight();
+                    var date = container.datepicker('getDate');
+                    if (multiple_dates !== false) {
+                        var index = $.inArray(dateText, multiple_dates);
+                        if (index >= 0) {
+                             multiple_dates.splice(index, 1);
+                        } else if (index < 0) {
+                            multiple_dates.push(dateText);
+                        }
+                        input_date.val(multiple_dates.join(';'));
+                        
+                        var date_formatted = $.datepicker.formatDate('yy-mm-dd', date);
+                        index = $.inArray(date_formatted, multiple_dates_formatted);
+                        if (index >= 0) {
+                             multiple_dates_formatted.splice(index, 1);
+                        } else if (index < 0) {
+                            multiple_dates_formatted.push(date_formatted);
+                        }
+                        input_date_formatted.val(multiple_dates_formatted.join(';'));
+                        container.datepicker('setDate',null);
+                    } else {
+                        input_date.val(dateText);
+                        if (date && interval && interval.length) {
+                            /** @var int day week day (starts from 0) */
+                            var day = (date.getDay() + 6) % 7;
+                            var timestamp = date.getTime();
+                            var day_type = dayType(date);
+                            /** filter select by days */
+                            var value = typeof(interval.val()) !== 'undefined';
+                            var matched = null;
+                            interval.find('option').each(function () {
+                                /** @this HTMLOptionElement */
+                                var option = $(this);
+                                
+                                var disabled = !this.value || intervalAllowed(option, timestamp, day, day_type) ? null: 'disabled';
+                                option.attr('disabled', disabled);
+                                if (disabled) {
+                                    if (this.selected) {
+                                        value = false;
+                                    }
+                                } else {
+                                    matched = this;
+                                    if (!value) {
+                                        this.selected = true;
+                                        value = !!this.value;
+                                        if (typeof(interval.highlight) === 'function') {
+                                            interval.highlight();
+                                        }
                                     }
                                 }
+                            });
+    
+                            if (value) {
+                                interval.removeClass('error');
+                            } else if (matched) {
+                                matched.selected = true;
+                                interval.removeClass('error');
+                            } else {
+                                interval.addClass('error');
                             }
-                        });
-
-                        if (value) {
-                            interval.removeClass('error');
-                        } else if (matched) {
-                            matched.selected = true;
-                            interval.removeClass('error');
-                        } else {
-                            interval.addClass('error');
                         }
                     }
-
                 },
                 "beforeShowDay": function (date) {
+                    var css_class = [];
+                    var tooltip = [];
+                    var available = true;
+                    var date_formatted = $.datepicker.formatDate('yy-mm-dd', date);
+                    var day_type = dayType(date);
+                    var day = (date.getDay() + 6) % 7;
                     if (interval && interval.length) {
+                        var interval_options = interval? interval.find('option'):[]
                         /** @var int day week day */
-                        var day = (date.getDay() + 6) % 7;
-                        var available_days = date_input.data('available_days')||[];
-                        return [available_days.indexOf(day) !== -1];
+                        var timestamp = date.getTime();
+                        available = false;
+                        interval_options.each(function(){
+                            if(this.value.length && intervalAllowed($(this), timestamp, day, day_type)){
+                                available = true;
+                                tooltip.push(this.value);
+                            }
+                        });
+                        
+                    } else if (multiple_dates_formatted !== false) {
+                        var index = $.inArray(date_formatted, multiple_dates_formatted);
+                        if (index >= 0) {
+                            css_class.push("{$selected_class}");
+                        }
                     } else {
-                        return [true];
+                        available = intervalAllowed(input_date, null, day, day_type);
                     }
+                    
+                    return [available, css_class.length?css_class.join(' '):'', tooltip.length?tooltip.join('\\n'):null]
                 }
             });
 
-            $(".ui-datepicker").each( function() {
-                $(this).hide().css({ zIndex: 1000 });
+            container.find(".ui-datepicker").each( function() {
+                $(this).css({ zIndex: 1000 });
             });
+            if (multiple_dates === false) {
+                 container.find(".ui-datepicker").each( function() {
+                    $(this).hide();
+                }); 
+            }
         };
 
         $(document).ready( function() {
             if (typeof $.fn.datepicker === "function") {
                 initDatePicker();
-
             } else {
                 load([
                     {
@@ -1130,7 +1308,6 @@ HTML;
                     } else {
                         initDatePicker();
                     }
-                    
                 });
             }
         });
@@ -1160,8 +1337,6 @@ HTML;
                     });
         
                     return deferred.promise();
-        
-                    /**/
         
                     function loadCSS(source) {
                         var link = $("#" + source.id);
@@ -1303,6 +1478,8 @@ HTML;
                     $param_value = self::escape($param_value);
                     if (in_array($param, array('autofocus'))) {
                         $params_string .= " {$target}";
+                    } elseif (strpos($param, 'data-') === 0) {
+                        $params_string .= " {$target}='{$param_value}'";
                     } else {
                         $params_string .= " {$target}=\"{$param_value}\"";
                     }
@@ -1312,7 +1489,11 @@ HTML;
         if (!empty($params['data'])) {
             $data = array();
             foreach ($params['data'] as $field => $value) {
-                $data['data-'.$field] = trim(json_encode($value), '"');
+                if (is_array($value)) {
+                    $value = json_encode($value);
+                    self::escape($value, ENT_QUOTES);
+                }
+                $data['data-'.$field] = trim($value, "'");
             }
             $params_string .= $this->addCustomParams(array_keys($data), $data);
         }
@@ -1334,7 +1515,7 @@ HTML;
             }
             $string = call_user_func_array('sprintf', $param);
         } elseif (!isset($params['translate']) || !empty($params['translate'])) {
-            $string = call_user_func($translate, $param);
+            $string = strlen($param) ? call_user_func($translate, $param) : '';
         } else {
             $string = $param;
         }

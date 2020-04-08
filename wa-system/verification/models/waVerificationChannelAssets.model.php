@@ -9,6 +9,7 @@ class waVerificationChannelAssetsModel extends waModel
     const NAME_ONETIME_PASSWORD = 'onetime_password';
     const NAME_PASSWORD_RECOVERY_HASH = 'password_recovery_hash';
     const NAME_PASSWORD_RECOVERY_CODE = 'password_recovery_code';
+    const NAME_CONFIRMATION_CODE = 'confirmation_code';
 
     public function __construct($type = null, $writable = false)
     {
@@ -104,9 +105,11 @@ class waVerificationChannelAssetsModel extends waModel
             }
         }
 
+        $data['tries'] = 0;
         $data['expires'] = $expires;
 
         return $this->insert($data, 1);
+
     }
 
     /**
@@ -129,10 +132,23 @@ class waVerificationChannelAssetsModel extends waModel
         return $asset;
     }
 
+    /**
+     * Get one asset by unique key (ID or other unique key)
+     * Also increment 'tries' value
+     * @param int|array $key
+     * @return array|null
+     * @throws waException
+     */
     public function getAsset($key)
     {
         if (wa_is_int($key)) {
-            return $this->getById($key);
+
+            // inc 'tries' field - table hold, so just one can process can inc this field
+            $this->incTriesByWhere($this->getWhereByField(array('id' => $key)));
+
+            // in this case get get already updated 'tires' counter
+            $asset = $this->getById($key);
+
         } elseif (is_array($key)) {
 
             $field = array();
@@ -147,15 +163,37 @@ class waVerificationChannelAssetsModel extends waModel
                     $field['contact_id'] = 0;
                 } else {
                     // not needed field_id
-                    return null;
+                    $field = array();
+                    break;
                 }
             }
 
-            return $this->getByField($field);
+            if (!$field) {
+                // just any condition key
+                $field = $key;
+            }
+
+            // inc 'tries' field - table hold, so just one can process can inc this field
+            $this->incTriesByWhere($this->getWhereByField($field));
+
+            // in this case get get already updated 'tires' counter
+            $asset = $this->getByField($field);
 
         } else {
+            $asset = null;
+        }
+
+        if (!$asset) {
             return null;
         }
+
+        return $asset;
+    }
+
+    protected function incTriesByWhere($where)
+    {
+        $sql = "UPDATE `wa_verification_channel_assets` SET `tries` = `tries` + 1 WHERE {$where}";
+        $this->exec($sql);
     }
 
     public function getByField($field, $value = null, $all = false, $limit = false)

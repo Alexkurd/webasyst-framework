@@ -21,7 +21,7 @@ class waBackendAuthConfig extends waAuthConfig
     {
         if (!isset(self::$instance)) {
             self::$instance = new self();
-            self::$instance->ensureChannelExists();
+            self::$instance->ensureVerificationChannelIdsConsistency();
         }
         return self::$instance;
     }
@@ -31,9 +31,33 @@ class waBackendAuthConfig extends waAuthConfig
         $this->config = wa()->getBackendAuthConfig();
     }
 
-    public function getVerificationChannelIds()
+    protected function ensureVerificationChannelIdsConsistency()
     {
         $this->ensureChannelExists();
+
+        $channel_ids = $this->getRawVerificationChannelIds();
+
+        $vcm = $this->getVerificationChannelModel();
+        $channels = $vcm->getChannels($channel_ids);
+
+        $email_type_present = false;
+        foreach ($channels as $channel) {
+            if ($channel['type'] === waVerificationChannelModel::TYPE_EMAIL) {
+                $email_type_present = true;
+                break;
+            }
+        }
+
+        if (!$email_type_present) {
+            $channel = $vcm->getDefaultSystemEmailChannel();
+            $channel_ids[] = $channel['id'];
+            $this->setRawVerificationChannelIds($channel_ids);
+        }
+    }
+
+    public function getVerificationChannelIds()
+    {
+        $this->ensureVerificationChannelIdsConsistency();
         return parent::getRawVerificationChannelIds();
     }
 
@@ -77,8 +101,10 @@ class waBackendAuthConfig extends waAuthConfig
                 'login_caption',
                 'login_captcha',
                 'login_placeholder',
+                'password_placeholder',
                 'verification_channel_ids',
-                'used_auth_methods'
+                'used_auth_methods',
+                'rememberme'
             );
             $methods = array();
             foreach ($keys as $k) {
@@ -167,7 +193,7 @@ class waBackendAuthConfig extends waAuthConfig
     /**
      * @return bool
      */
-    public function getSignupConfirm()
+    public function getSignUpConfirm()
     {
         return false;
     }
@@ -189,5 +215,81 @@ class waBackendAuthConfig extends waAuthConfig
     public function getCanLoginByContactLogin()
     {
         return true;
+    }
+
+    /**
+     * Placeholder for input 'login' for Login form
+     * @return string
+     */
+    public function getLoginPlaceholder()
+    {
+        return $this->getScalarValue('login_placeholder', _ws('Login or email'));
+    }
+
+    /**
+     * Placeholder for input 'password' for Login form
+     * @return string
+     */
+    public function getPasswordPlaceholder()
+    {
+        return $this->getScalarValue('password_placeholder', _ws('Password'));
+    }
+
+    /**
+     * See parent description, especially in light of invariant
+     * @return array
+     */
+    public function getUsedAuthMethods()
+    {
+        $methods = parent::getUsedAuthMethods();
+        if (!in_array(self::AUTH_METHOD_EMAIL, $methods)) {
+            $methods[] = self::AUTH_METHOD_EMAIL;
+        }
+        return $methods;
+    }
+
+    /**
+     * @return bool
+     */
+    public function getRememberMe()
+    {
+        try {
+            $app_settings_model = new waAppSettingsModel();
+            $enable = !!$app_settings_model->get('webasyst', 'rememberme', true);
+        } catch (waDbException $e) {
+            $enable = true;
+        }
+        return $enable;
+    }
+
+    /**
+     * @param bool $enable
+     */
+    public function setRememberMe($enable = true)
+    {
+        try {
+            $app_settings_model = new waAppSettingsModel();
+            $app_settings_model->set('webasyst', 'rememberme', $enable ? '1' : '0');
+        } catch (waDbException $e) {
+
+        }
+    }
+
+    /**
+     * Backend auth not support phone prefix transformation
+     * @return array
+     */
+    public function getPhoneTransformPrefix()
+    {
+        return array();
+    }
+
+    /**
+     * Backend auth not support phone transformation
+     * @param string|string[] $options
+     */
+    public function setPhoneTransformPrefix($options)
+    {
+        // noting to do
     }
 }

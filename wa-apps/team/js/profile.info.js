@@ -165,13 +165,14 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
                 if(mode == 'view' && !this.fieldValue) {
                     return null;
                 }
+                var value = $.isPlainObject(this.fieldValue) ? this.fieldValue.value : this.fieldValue;
                 var result = null;
                 if (mode == 'edit') {
                     result = $('<span><input class="val" type="text"></span>');
-                    result.find('.val').val(this.fieldValue);
+                    result.find('.val').val(value);
                 } else {
                     result = $('<span class="val"></span>');
-                    result.text(this.fieldValue);
+                    result.text(value);
                 }
                 return result;
             },
@@ -237,7 +238,6 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
                 if (mode != 'view' && mode != 'edit') {
                     throw new Error('Unknown mode: '+mode);
                 }
-
                 if (this.currentMode != mode) {
                     this.currentMode = mode;
                     if (replaceEditor) {
@@ -379,8 +379,21 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
                     if (id === '') {
                         attrs += ' disabled';
                     }
-                    options += '<option value="'+id+'"'+attrs+'>' + $.wa.encodeHTML(this.fieldData.options[id]) + '</option>';
+
+                    id = id || '';
+                    id = typeof id === 'string' ? id : ('' + id);
+
+                    // Escape not only html tags but also quote
+                    var id_safe = $.wa.encodeHTML(id).replace('"', '&quot;');
+
+                    var opt = '<option value="{$id}" {$attrs}>{$text}</option>'
+                            .replace('{$id}', id_safe)
+                            .replace('{$attrs}', attrs)
+                            .replace('{$text}', $.wa.encodeHTML(this.fieldData.options[id]));
+
+                    options += opt;
                 }
+
                 return $('<div><select class="val '  + (this.fieldData.type + '').toLowerCase() + '"><option value=""'+(selected ? '' : ' selected')+'>'+this.notSet()+'</option>'+options+'</select></div>');
             }
         }
@@ -530,6 +543,7 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
         },
 
         newInlineFieldElement: function(mode) {
+
             // Do not show anything in view mode if field is empty
             if(mode == 'view' && !this.fieldValue) {
                 return null;
@@ -618,10 +632,7 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
                 } else {
                     // show as input
                     var result = $('<div></div>').append(contactEditor.baseFieldType.newInlineFieldElement.call(this, mode));
-
-                    result.find('.val').val('');
-
-                    //$.wa.defaultInputValue(result.find('.val'), this.fieldData.name+(this.fieldData.required ? ' ('+$_('required')+')' : ''), 'empty');
+                    
                     result.find('.val').attr('placeholder', this.fieldData.name+(this.fieldData.required ? ' ('+$_('required')+')' : ''));
                     return result;
                 }
@@ -848,7 +859,7 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
             this.subfieldFactory.initializeFactory($.extend({}, this.fieldData));
             this.fieldData = $.extend({}, this.fieldData, {'required': this.subfieldFactory.fieldData.required});
             this.subfieldEditors = [this.subfieldFactory.createEditor(this.contactType)];
-            if (typeof this.subfieldEditors[0].fieldValue == 'object') {
+            if ($.isPlainObject(this.subfieldEditors[0].fieldValue)) {
                 this.emptySubValue = $.extend({}, this.subfieldEditors[0].fieldValue);
                 if (this.fieldData.ext) {
                     this.emptySubValue.ext = this.fieldData.extKeys[0];
@@ -885,7 +896,7 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
                     // if there's something else, then pass the whole object.
                     var passObject = false;
                     for(var k in data[i]) {
-                        if (k != 'value' && k != 'ext') {
+                        if (k != 'value' && k != 'ext' && k != 'status') {
                             passObject = true;
                             break;
                         }
@@ -1008,6 +1019,7 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
         /** Return button to delete subfield. */
         deleteSubfieldButton: function(sf) {
             var that = this;
+
             var r = $('<a class="delete-subfield hint" href="javascript:void(0)">'+$_('delete')+'</a>').click(function() {
                 if (that.subfieldEditors.length <= 1) {
                     return false;
@@ -1142,6 +1154,8 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
         newInlineFieldElement: null,
 
         newFieldElement: function(mode) {
+            var that = this;
+
             if(this.fieldData.read_only) {
                 mode = 'view';
             }
@@ -1152,9 +1166,15 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
             var allEmpty = true;
             for(var i = 0; i < this.subfieldEditors.length; i++) {
                 var result = this.newSubFieldElement(mode, i);
+                result.data('subfieldEditor', this.subfieldEditors[i]);
+
+                if (mode === 'edit') {
+                    result.prepend('<i class="icon16 sort sort-handler"></i>');
+                }
                 childWrapper.append(result);
                 allEmpty = allEmpty && this.subfieldEditors[i].parentEditorData.empty;
             }
+
 
             // do not show anything if there are no values
             if (allEmpty && !this.fieldData.show_empty) {
@@ -1196,11 +1216,46 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
                         if (that.currentMode != 'null') {
                             newLast.setMode(that.currentMode);
                         }
-                        childWrapper.append(that.newSubFieldElement(mode, index));
+
+                        var $value = that.newSubFieldElement(mode, index);
+                        $value.data('subfieldEditor', that.subfieldEditors[index]);
+                        $value.prepend('<i class="icon16 sort sort-handler"></i>');
+
+                        childWrapper.append($value);
+
                         that.domElement.find('.delete-subfield').css('display', 'inline');
                     })
                 );
                 wrapper.append(adder);
+
+                // init sortable
+                if (this.fieldData.multi && $.fn.sortable) {
+                    wrapper.find('.multifield-subfields').sortable({
+                        'distance': 5,
+                        'opacity': 0.75,
+                        'axis': 'y',
+                        'tolerance': 'pointer',
+                        'items': '> .value',
+                        'handle': '.sort-handler',
+                        'cursor': 'move',
+                        'update': function(event, ui) {
+                            var $item = ui.item,
+                                $multifield_subfields_block = $item.closest('.multifield-subfields');
+
+                            var new_index = 0;
+                            $multifield_subfields_block.find('[data-subfield-index]').each(function() {
+                                var $item = $(this),
+                                    editor = $item.parent().data('subfieldEditor');
+                                that.subfieldEditors[new_index] = editor;
+                                $item.data('subfieldIndex', new_index).attr('data-subfield-index', new_index);
+                                new_index++;
+                            });
+                        }
+                    });
+                } else {
+                    console.log(['$.fn.sortable available?', !!$.fn.sortable]);
+                }
+
             }
 
             if (inlineMode) {
@@ -1614,11 +1669,13 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
                 return;
             }
             if (this.currentMode == 'edit') {
-                this.domElement.find('.val').each(function() {
-                    var el = $(this);
-                    var part = el.data('part');
-                    el.val(data.data[part] || '');
-                });
+                if (data && data.data) {
+                    this.domElement.find('.val').each(function() {
+                        var el = $(this);
+                        var part = el.data('part');
+                        el.val(data.data[part] || '');
+                    });
+                }
             } else {
                 this.domElement.find('.val').html(this.fieldValue);
             }
@@ -1712,7 +1769,7 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
             if (typeof data == 'undefined') {
                 data = '';
             }
-            if (typeof(data) == 'object') {
+            if ($.isPlainObject(data)) {
                 this.fieldValue = data.data;
                 this.viewValue = data.value;
             } else {
@@ -1751,7 +1808,7 @@ $.wa.fieldTypesFactory = function(contactEditor, fieldType) { "use strict";
             if (typeof data == 'undefined') {
                 data = '';
             }
-            if (typeof(data) == 'object') {
+            if ($.isPlainObject(data)) {
                 this.fieldValue = data.data;
                 this.viewValue = data.value;
             } else {
@@ -1999,10 +2056,15 @@ $.wa.contactEditorFactory = function(options) { "use strict"; //{{{
                     return;
                 }
 
-                if (typeof this.fieldEditors[f] == 'undefined') {
-                    this.fieldEditors[f] = this.editorFactories[f].createEditor(this.contactType);
+                try {
+                    if (typeof this.fieldEditors[f] == 'undefined') {
+                        this.fieldEditors[f] = this.editorFactories[f].createEditor(this.contactType);
+                    }
+                    this.fieldEditors[f].setValue(newData[f]);
+                } catch (e) {
+                    console.log('Unable to initialize editor '+f);
+                    console.log(e);
                 }
-                this.fieldEditors[f].setValue(newData[f]);
             }
 
         },

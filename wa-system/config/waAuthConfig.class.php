@@ -25,10 +25,14 @@ abstract class waAuthConfig
     /**
      * @param null|array $options
      *   string|null 'env' Environment. If skip or NULL get current env
-     * @return waApiAuthConfig|waBackendAuthConfig|waDomainAuthConfig
+     * @return waApiAuthConfig|waBackendAuthConfig|waDomainAuthConfig|null
      */
     public static function factory($options = null)
     {
+        if (waConfig::get('is_template')) {
+            return null;
+        }
+
         $options = is_array($options) ? $options : array();
 
         $env = isset($options['env']) && is_scalar($options['env']) ? $options['env'] : null;
@@ -38,11 +42,12 @@ abstract class waAuthConfig
             return waBackendAuthConfig::getInstance();
         } elseif ($env === 'api') {
             return waApiAuthConfig::getInstance();
-        } else {
+        } elseif ($env === 'frontend') {
             return waDomainAuthConfig::factory(isset($options['domain']) ? $options['domain'] : null);
+        } else {
+            return null;
         }
     }
-
 
     /**
      * Ensure that some channel set in config and it exists
@@ -97,6 +102,16 @@ abstract class waAuthConfig
     {
         $this->setBoolValue('auth', $enable);
     }
+
+    /**
+     * @return bool
+     */
+    abstract public function getRememberMe();
+
+    /**
+     * @param bool $enable
+     */
+    abstract public function setRememberMe($enable = true);
 
     /**
      * @return string
@@ -154,6 +169,7 @@ abstract class waAuthConfig
     }
 
     /**
+     * Placeholder for input 'login' for Login form
      * @return string
      */
     public function getLoginPlaceholder()
@@ -161,9 +177,32 @@ abstract class waAuthConfig
         return $this->getScalarValue('login_placeholder');
     }
 
+    /**
+     * Set placeholder for input 'login' for Login form
+     * @param $placeholder
+     */
     public function setLoginPlaceholder($placeholder)
     {
         $this->setScalarValue('login_placeholder', $placeholder);
+    }
+
+    /**
+     * Placeholder for input 'password' for Login form
+     * @return string
+     */
+    public function getPasswordPlaceholder()
+    {
+        return $this->getScalarValue('password_placeholder');
+    }
+
+
+    /**
+     * Set placeholder for input 'password' for Login form
+     * @param $placeholder
+     */
+    public function setPasswordPlaceholder($placeholder)
+    {
+        $this->setScalarValue('password_placeholder', $placeholder);
     }
 
     /**
@@ -269,6 +308,15 @@ abstract class waAuthConfig
     }
 
     /**
+     * Number of attempts to verify code
+     * @return int
+     */
+    public function getVerifyCodeTriesCount()
+    {
+        return 3;
+    }
+
+    /**
      * Return channels info arrays (not objects)
      *
      * @param null|string $priority_type
@@ -278,6 +326,9 @@ abstract class waAuthConfig
      *   ALSO Take into account 'used_methods' setting ( @see getUsedAuthMethods )
      *   Therefore getVerificationChannelIds not compatible with getVerificationChannels ( @see getVerificationChannelIds )
      *   So BE CAREFUL
+     *
+     *
+     * TODO: take into account getAuth() status of authorization
      *
      * @return array
      *   Array indexed by channel type
@@ -340,7 +391,6 @@ abstract class waAuthConfig
 
     /**
      * @return waVerificationChannel
-     * @throws waException
      */
     public function getEmailVerificationChannelInstance()
     {
@@ -358,7 +408,6 @@ abstract class waAuthConfig
 
     /**
      * @return waVerificationChannel
-     * @throws waException
      */
     public function getSMSVerificationChannelInstance()
     {
@@ -377,8 +426,8 @@ abstract class waAuthConfig
     }
 
     /**
+     * @param string $type waVerificationChannelModel::TYPE_*
      * @return waVerificationChannel
-     * @throws waException
      */
     public function getVerificationChannelInstance($type)
     {
@@ -711,6 +760,9 @@ abstract class waAuthConfig
         return $get;
     }
 
+    /**
+     * @return waVerificationChannelModel
+     */
     protected function getVerificationChannelModel()
     {
         return new waVerificationChannelModel();
@@ -795,7 +847,7 @@ abstract class waAuthConfig
      * Need signup confirm or not
      * @return bool
      */
-    abstract public function getSignupConfirm();
+    abstract public function getSignUpConfirm();
 
     /**
      * Driver method for getting and saving data all at once
@@ -806,5 +858,112 @@ abstract class waAuthConfig
      * @return mixed
      */
     abstract protected function getMethodByKey($type, $key = null);
+
+    /**
+     * Get options for transform phone(s) prefix
+     * @param array
+     * @return array
+     */
+    abstract public function getPhoneTransformPrefix();
+
+    /**
+     * @return bool
+     */
+    public function needTransformPhonePrefix()
+    {
+        return !!$this->getPhoneTransformPrefix();
+    }
+
+    /**
+     * @param $options
+     * @return mixed
+     */
+    abstract public function setPhoneTransformPrefix($options);
+
+    /**
+     * Transform phone by rule(s) that in current config
+     * @param string $phone
+     * @param bool $is_reverse Reverse (<=) or direct (=>) transformation
+     * @return array $result
+     *   bool   $result['status'] if TRUE phone is changed (transformed)
+     *   string $result['phone']  Resulted phone. If status is false original (input) phone will be return here
+     */
+    public function transformPhone($phone, $is_reverse = false)
+    {
+        $result = array(
+            'status' => false,
+            'phone' => $phone
+        );
+
+        if (!is_scalar($phone)) {
+            return $result;
+        }
+
+        $options = $this->getPhoneTransformPrefix();
+        $result = self::transformPhonePrefix($phone, array_merge($options, array('is_reverse' => $is_reverse)));
+
+        return $result;
+    }
+
+    /**
+     * Transform phone by specified rule
+     *
+     * @param string|string[] $phone
+     *
+     * @param array $options - options of transformation:
+     *   - string 'input_code', for example 8 for Russia
+     *   - string 'output_code', for example 7 for Russia
+     *   - bool 'is_reverse' - reverse transformation of direct. By default is false, so direct
+     *          Reverse is transformation from output_code to input_code (for example for Russia, 7 => 8)
+     *          Direct is transformation from input_code to output_code (for example for Russia, 8 => 7)
+     *
+     * @return array
+     */
+    protected static function transformPhonePrefix($phone, $options = array())
+    {
+        $is_input_scalar = is_scalar($phone) || $phone === null;
+        $phones = waUtils::toStrArray($phone);
+        $original_phones = $phones;
+
+        $options = is_array($options) ? $options : array();
+        // is reverse transformation
+        $is_reverse = (bool)ifset($options['is_reverse']);
+
+        foreach ($phones as &$phone) {
+            $phone = waContactPhoneField::cleanPhoneNumber($phone);
+
+            $input_code = ifset($options['input_code']);
+            $input_code = is_scalar($input_code) && strlen((string)$input_code) > 0 ? (string)$input_code : null;
+
+            $output_code = ifset($options['output_code']);
+            $output_code = is_scalar($output_code) && strlen((string)$output_code) > 0 ? (string)$output_code : null;
+
+            if (wa_is_int($input_code) && wa_is_int($output_code)) {
+                $input_code_len = strlen($input_code);
+                $output_code_len = strlen($output_code);
+                if (!$is_reverse && substr($phone, 0, $input_code_len) === $input_code) {
+                    $phone = $output_code . substr($phone, $input_code_len);
+                } elseif ($is_reverse && substr($phone, 0, $output_code_len) === $output_code) {
+                    $phone = $input_code . substr($phone, $output_code_len);
+                }
+            }
+        }
+        unset($phone);
+
+        $result = array();
+        foreach ($phones as $index => $phone) {
+            $changed = !waContactPhoneField::isPhoneEquals($original_phones[$index], $phone);
+            $result[$index] = array(
+                'status' => $changed,
+                'phone' => $phone
+            );
+        }
+
+        if ($is_input_scalar) {
+            return reset($result);
+        } else {
+            return $result;
+        }
+    }
 
 }

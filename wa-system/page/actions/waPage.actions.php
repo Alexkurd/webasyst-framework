@@ -186,7 +186,11 @@ class waPageActions extends waActions
     {
         foreach ($pages as $page_id => $page) {
             if ($page['parent_id']) {
-                $pages[$page['parent_id']]['childs'][] = &$pages[$page_id];
+                if (!empty($pages[$page['parent_id']])) {
+                    $pages[$page['parent_id']]['childs'][] = &$pages[$page_id];
+                } else {
+                    $pages[$page_id]['parent_id'] = null;
+                }
             }
         }
 
@@ -480,15 +484,13 @@ class waPageActions extends waActions
 
     private function translit($str)
     {
-        $str = preg_replace('/\s+/', '-', $str);
+        $str = preg_replace('/\s+/u', '-', $str);
         if ($str) {
             foreach (waLocale::getAll() as $locale_id => $locale) {
-                if ($locale_id != 'en_US') {
-                    $str = waLocale::transliterate($str, $locale);
-                }
+                $str = waLocale::transliterate($str, $locale);
             }
         }
-        $str = preg_replace('/[^a-zA-Z0-9_-]+/', '', $str);
+        $str = preg_replace('/[^a-zA-Z0-9_\-]+/u', '', $str);
         return strtolower($str);
     }
 

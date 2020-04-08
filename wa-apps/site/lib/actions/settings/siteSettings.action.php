@@ -1,4 +1,4 @@
-<?php 
+<?php
 
 class siteSettingsAction extends waViewAction
 {
@@ -13,7 +13,7 @@ class siteSettingsAction extends waViewAction
                 $auth_apps[$route['app']] = true;
             }
         }
-        
+
         $temp = array();
         foreach ($apps as $app_id => $app) {
             if (isset($app['frontend']) || isset($auth_apps[$app_id])) {
@@ -29,7 +29,7 @@ class siteSettingsAction extends waViewAction
                         $auth_apps[$app_id] = $temp[$app_id];
                     }
                 }
-            } 
+            }
         }
 
         $this->view->assign('auth_apps', $auth_apps);
@@ -47,17 +47,23 @@ class siteSettingsAction extends waViewAction
         $this->view->assign('apps', $temp);
         $this->view->assign('domain_id', siteHelper::getDomainId());
         $this->view->assign('domain', siteHelper::getDomain());
+        $this->view->assign('domain_idn', waIdna::dec(siteHelper::getDomain()));
         $this->view->assign('title', siteHelper::getDomain('title'));
         $this->view->assign('is_https', waRequest::isHttps());
 
-        if ($domain_alias = wa()->getRouting()->isAlias(siteHelper::getDomain())) {
+        $domain = siteHelper::getDomain();
+        $domain_alias = wa()->getRouting()->isAlias($domain);
+        $this->getRobots($domain, $domain_alias);
+
+        if ($domain_alias) {
             $this->view->assign('domain_alias', $domain_alias);
             return;
         }
 
+        $this->getStaticFiles($domain);
+
         $s = siteHelper::getDomain('style');
         $this->view->assign('style', $s ? $s : 'white');
-        $domain = siteHelper::getDomain();
         $domain_config_path = $this->getConfig()->getConfigPath('domains/'.$domain.'.php');
         if (file_exists($domain_config_path)) {
             $domain_config = include($domain_config_path);
@@ -71,7 +77,7 @@ class siteSettingsAction extends waViewAction
             $domain_name = !empty($domain_config['name']) ? $domain_config['name'] : null;
             $domain_config['apps'] = wa()->getFrontendApps($domain, $domain_name);
         } else {
-            $this->view->assign('domain_apps_type', 1);            
+            $this->view->assign('domain_apps_type', 1);
         }
         $this->view->assign('domain_apps', $domain_config['apps']);
         $this->view->assign('cdn_list', ifset($domain_config['cdn_list'], array()));
@@ -86,7 +92,6 @@ class siteSettingsAction extends waViewAction
             $domain_config['google_analytics'] = array('code' => '');
         }
         $this->view->assign('google_analytics', $domain_config['google_analytics']);
-        $this->getStaticFiles($domain);
         $this->view->assign('url', $this->getDomainUrl($domain));
         $this->view->assign('ssl_all', ifset($domain_config, 'ssl_all', null));
         $this->view->assign('url_notification', ifset($domain_config, 'url_notification', false));
@@ -157,6 +162,9 @@ class siteSettingsAction extends waViewAction
     {
         $path = $this->getConfig()->getPath('system').'/auth/adapters/';
         $dh = opendir($path);
+        if (!$dh) {
+            return array();
+        }
         $result = array();
         while (($f = readdir($dh)) !== false) {
             if ($f === '.' || $f === '..' || is_dir($path.$f)) {
@@ -171,8 +179,8 @@ class siteSettingsAction extends waViewAction
         closedir($dh);
         return $result;
     }
-    
-    
+
+
     protected function getDomainUrl($domain)
     {
         $u1 = rtrim(wa()->getRootUrl(false, false), '/');
@@ -181,11 +189,11 @@ class siteSettingsAction extends waViewAction
         $u = isset($domain_parts['path']) ? $domain_parts['path'] : '';
         if ($u1 != $u2 && substr($u, 0, strlen($u1)) == $u1) {
              $u = $u2.substr($u, strlen($u1));
-        }         
+        }
         return $domain_parts['host'].$u;
     }
-    
-    protected function getRouteUrl($path, $route) 
+
+    protected function getRouteUrl($path, $route)
     {
         $url = $route['url'];
         $url = preg_replace('/\[([i|s]?:[a-z_]+)\]/ui', '', $url);
@@ -193,48 +201,74 @@ class siteSettingsAction extends waViewAction
         $url = str_replace('*', '', $url);
         return $path.'/'.$url;
     }
-        
+
     /**
-     * Prepare favicon and robots.txt
-     * 
+     * Prepare favicon and Touch icon
+     *
      * @param string $domain
      */
     protected function getStaticFiles($domain)
     {
+        // Favicon
         $path = wa()->getDataPath(null, true).'/data/'.$domain.'/favicon.ico';
         if (file_exists($path)) {
             $favicon = wa()->getDataUrl('data/'.$domain.'/favicon.ico', true);
         } else {
             $favicon = 'http'.(waRequest::isHttps() ? 's' : '').'://'.$domain.'/favicon.ico';
         }
+
+        // Touch icon
         $path = wa()->getDataPath(null, true).'/data/'.$domain.'/apple-touch-icon.png';
         if (file_exists($path)) {
             $touchicon = wa()->getDataUrl('data/'.$domain.'/apple-touch-icon.png', true);
         } else {
             $touchicon = false;
         }
-        $path = wa()->getDataPath(null, true).'/data/'.$domain.'/robots.txt';
-        if (file_exists($path)) {
-            $robots = file_get_contents($path);
-        } else {
-            $robots = '';
-        }
-        $this->view->assign('robots', $robots);
         $this->view->assign('favicon', $favicon);
         $this->view->assign('touchicon', $touchicon);
 
         if (strpos($domain, '/') !== false) {
             $this->view->assign('touchicon_message', sprintf(_w('Touch icon you upload here will not take effect for you website %s because your website is set for a subfolder on a domain. Touch icon uploaded using the form above will be set only for websites set from the domain root folder.'), $domain));
             $this->view->assign('favicon_message', sprintf(_w('Favicon image you upload here will not take effect for you website %s because your website is set for a subfolder on a domain. Favicon uploaded using the form above will be set only for websites set from the domain root folder.'), $domain));
-            $this->view->assign('robots_message', sprintf(_w('Rules you set above for robots.txt will not take effect for you website %s because your website is set for a subfolder on a domain. Rules for robots.txt from the form above will be effective only for websites set to the domain root folder.'), $domain));    
-        } else {
+            } else {
             $root_path = $this->getConfig()->getRootPath();
             if (file_exists($root_path.'/favicon.ico')) {
-                $this->view->assign('favicon_message', _w('File favicon.ico exists in the Webasyst framework installation folder. The favicon you upload here will be overridden by the icon uploaded as file unless you delete this file.'));                
+                $this->view->assign('favicon_message', _w('File favicon.ico exists in the Webasyst framework installation folder. The favicon you upload here will be overridden by the icon uploaded as file unless you delete this file.'));
             }
             if (file_exists($root_path.'/apple-touch-icon.png')) {
                 $this->view->assign('touchicon_message', _w('File apple-touch-icon.png exists in the Webasyst framework installation folder. The touch icon you upload here will be overridden by the icon uploaded as file unless you delete this file.'));
             }
+        }
+    }
+
+    /**
+     * Prepare robots.txt
+     * @param string $domain
+     * @param false|string $domain_alias
+     */
+    protected function getRobots($domain, $domain_alias)
+    {
+        // Robots
+        $path = wa()->getDataPath(null, true).'/data/'.$domain.'/robots.txt';
+        $alias_path = !empty($domain_alias) ? wa()->getDataPath(null, true).'/data/'.$domain_alias.'/robots.txt' : null;
+
+        if (file_exists($path)) {
+            // Personal robots
+            $robots = file_get_contents($path);
+        } elseif ($alias_path && file_exists($alias_path)) {
+            // Alias robots
+            $robots = file_get_contents($alias_path);
+        } else {
+            // Empty :|
+            $robots = '';
+        }
+
+        $this->view->assign('robots', $robots);
+
+        if (strpos($domain, '/') !== false) {
+            $this->view->assign('robots_message', sprintf(_w('Rules you set above for robots.txt will not take effect for you website %s because your website is set for a subfolder on a domain. Rules for robots.txt from the form above will be effective only for websites set to the domain root folder.'), $domain));
+        } else {
+            $root_path = $this->getConfig()->getRootPath();
             if (file_exists($root_path.'/robots.txt')) {
                 $this->view->assign('robots_message', _w('File robots.txt exists in the Webasyst framework installation folder. Rules for robots.txt you specify above will not take effect unless you delete this file.'));
             }

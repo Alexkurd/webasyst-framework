@@ -10,10 +10,7 @@
  */
 class waFrontendSetPasswordForm extends waSetPasswordForm
 {
-    /**
-     * @var waDomainAuthConfig
-     */
-    protected $auth_config;
+    protected $env = 'frontend';
 
     /**
      * waFrontendSetPasswordForm constructor.
@@ -39,19 +36,6 @@ class waFrontendSetPasswordForm extends waSetPasswordForm
         }
         $this->options['hash'] = $hash;
 
-    }
-
-    /**
-     * @param array $options - that options will be passed to proper factory/constructor
-     * @return waFrontendSetPasswordForm
-     */
-    public static function factory($options = array())
-    {
-        if (waConfig::get('is_template')) {
-            return null;
-        }
-        $auth_config = waDomainAuthConfig::factory();
-        return wa($auth_config->getApp())->getSetPasswordForm($options);
     }
 
     /**

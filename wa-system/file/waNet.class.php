@@ -215,19 +215,36 @@ class waNet
      */
     protected function buildRequest(&$url, &$content, &$method)
     {
-        $format = ifempty($this->options['request_format'], $this->options['format']);
-        if ($content && in_array($format, array(self::FORMAT_XML, self::FORMAT_XML), true)) {
-            $method = self::METHOD_POST;
+        if ($content && $method == self::METHOD_GET) {
+            //
+            // Unable to encode FORMAT_XML and FORMAT_JSON for METHOD_GET.
+            // Have to deal with it here.
+            //
+            $format = ifempty($this->options['request_format'], $this->options['format']);
+            if (in_array($format, array(self::FORMAT_XML), true)) {
+                // FORMAT_XML, METHOD_GET becomes FORMAT_XML, METHOD_POST
+                $method = self::METHOD_POST;
+            } else {
+                // FORMAT_JSON, METHOD_GET becomes FORMAT_RAW, METHOD_GET
+                $get = is_string($content) ? $content : http_build_query($content);
+                $url .= strpos($url, '?') ? '&' : '?'.$get;
+                $content = array();
+            }
         }
 
-        if ($content && ($method == self::METHOD_GET)) {
-            $get = is_string($content) ? $content : http_build_query($content);
-            $url .= strpos($url, '?') ? '&' : '?'.$get;
-            $content = array();
-        }
-
-        if ($post = self::getPost($url, $this->options['required_get_fields'])) {
-            $method = self::METHOD_POST;
+        // When URL is too long, move some fields to POST body
+        $post = self::getPost($url, $this->options['required_get_fields']);
+        if ($post) {
+            switch ($method) {
+                // GET becomes POST
+                // PUT and POST are ok as is
+                // DELETE don't know what to do
+                case self::METHOD_GET:
+                    $method = self::METHOD_POST;
+                    break;
+                case self::METHOD_DELETE:
+                    throw new waException('Too long URL for METHOD_DELETE');
+            }
             $content = array_merge($post, $content);
         }
 
@@ -329,6 +346,8 @@ class waNet
                             $message = 'Unsupported class "%s" of content object. Expected instance of SimpleXMLElement or DOMDocument classes.';
                             throw new waException(sprintf($message, $class));
                         }
+                    } else {
+                        throw new waException('XML content must be an instance of SimpleXMLElement or DOMDocument classes.');
                     }
                     break;
                 default:
@@ -413,14 +432,21 @@ class waNet
     public function getResponseHeader($header = null)
     {
         if (!empty($header)) {
-            if (isset($this->response_header[$header])) {
+            if (array_key_exists($header, $this->response_header)) {
                 return $this->response_header[$header];
             }
-            $header = str_replace('-', '_', strtolower($header));
 
-            return ifset($this->response_header[$header]);
+            $header_alias = $header = str_replace('-', '_', $header);
+
+            foreach ($this->response_header as $field => $value) {
+                // Ignore register of headers according to RFC
+                if (strcasecmp($field, $header) === 0 || strcasecmp($header_alias, $header) === 0) {
+                    return $value;
+                }
+            }
+
+            return null;
         }
-
         return $this->response_header;
     }
 

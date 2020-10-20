@@ -527,7 +527,9 @@ class yandexdeliveryShipping extends waShipping
             $response = $this->apiQuery('confirmSenderOrders', $data);
             if (isset($response['result']['error'][$order_id])) {
                 $message = 'Ошибка при автоматическом подтверждении отправления. Подтвердите отправление вручную в личном кабинете «Яндекс.Доставки».';
-                $hint = htmlentities($response['result']['error'][$order_id], ENT_NOQUOTES, 'utf-8');
+                $hint_text = is_array($response['result']['error'][$order_id])
+                    ? implode(',', $response['result']['error'][$order_id]) : $response['result']['error'][$order_id];
+                $hint = htmlentities($hint_text, ENT_NOQUOTES, 'utf-8');
                 $message .= sprintf('<span class="hint">%s</span>', $hint);
 
                 return $message;
@@ -960,9 +962,23 @@ class yandexdeliveryShipping extends waShipping
                 $params['ship_date'] = date('Y-m-d', strtotime($departure_datetime));
             }
 
+            $country_id = $this->getAddress('country');
+            $region_id = $this->getAddress('region');
+            if (!empty($country_id) && !empty($region_id)) {
+                $region_model = new waRegionModel();
+                $country_data = $region_model->getByCountry($country_id);
+                $region_data = $region_model->getByField([
+                    'country_iso3' => $country_id,
+                    'code' => $region_id,
+                ]);
+                $name_region = $region_data['name'];
+                if (!empty($name_region)) {
+                    $params['city_to'] .= ', ' . $name_region;
+                }
+            }
+
             try {
                 $callback = array($this, 'handleCalculateResponse');
-
                 $services = $this->apiQuery('searchDeliveryList', $params, $callback);
 
                 return $this->handleCalculateResponse(null, $services);
@@ -1017,6 +1033,14 @@ class yandexdeliveryShipping extends waShipping
             if (empty($services)) {
                 $rates = 'Доставка по указанному адресу недоступна.';
             } else {
+                // Если API вернул службу доставки без точек самовывоза, то удаляем такую службу из массива
+                if (!is_object($services)) {
+                    foreach ($services as $key => $item) {
+                        if ($item['is_pickup_point'] && empty($item['pickupPoints'])) {
+                            unset($services[$key]);
+                        }
+                    }
+                }
 
                 $rates = $this->groupServices($services);
                 foreach ($services as $service) {

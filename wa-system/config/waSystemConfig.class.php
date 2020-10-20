@@ -24,7 +24,8 @@ class waSystemConfig
 
     protected static $system_options = array(
         'backend_url' => 'webasyst',
-        'mod_rewrite' => true
+        'mod_rewrite' => true,
+        'cache_versioning' => true,
     );
 
     public static $time = null;
@@ -217,7 +218,7 @@ class waSystemConfig
             self::$system_options['mod_rewrite'] = false;
         }
 
-        if (!get_magic_quotes_gpc()) {
+        if (!ini_get('magic_quotes_gpc')) {
             return;
         }
 

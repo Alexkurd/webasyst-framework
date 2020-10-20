@@ -1000,6 +1000,9 @@ HTML;
                 $date_params['description'] = _ws('Date');
             }
 
+            if (isset($params['params']['autocomplete'])) {
+                $date_params['autocomplete'] = $params['params']['autocomplete'] ? 'on' : 'off';
+            }
 
             $date_params['value'] = ifset($params, 'value', 'date_str', '');
 
@@ -1042,10 +1045,9 @@ HTML;
                         ifset($interval['to_m'], 0)
                     );
                     $interval_params['options'][$value] = array(
-                        'value'       => $value,
-                        'title'       => empty($value) ? _ws('Time') : $value,
-                        'description' => $start_date ? $start_date : $value,
-                        'data'        => compact('days', 'value', 'start_date', 'start_timestamp'),
+                        'value' => $value,
+                        'title' => empty($value) ? _ws('Time') : $value,
+                        'data'  => compact('days', 'value', 'start_date', 'start_timestamp'),
                     );
                     $available_days = array_merge($days, $available_days);
                 } else {
@@ -1060,6 +1062,7 @@ HTML;
                     $available_days = array_merge(array_keys($interval), $available_days);
                 }
             }
+            unset($start_date);
 
             $available_days = array_values(array_unique($available_days));
         }
@@ -1105,6 +1108,13 @@ HTML;
             $root_url = wa()->getRootUrl();
             $multiple = empty($params['multiple']) ? 'false' : 'new Array()';
             $selected_class = ifset($params, 'params', 'selected', 'ui-state-active');
+
+            $start_date = date('Y-m-d');
+            $min_date   = $offset;
+            if (isset($params['delivery_date'])) {
+                $start_date = date('Y-m-d', $params['delivery_date']);
+                $min_date   = date('d.m.Y', $params['delivery_date']);
+            }
             $html .= <<<HTML
 <script>
     ( function() {
@@ -1133,6 +1143,7 @@ HTML;
         });
         
         input_date.data('available_days', {$available_days});
+        input_date.data('start_date', '{$start_date}');
         
         var intervalAllowed = function(option, timestamp, day, day_type) {
             
@@ -1174,7 +1185,7 @@ HTML;
                 "altField": (multiple_dates === false?('#{$date_formatted_params['id']}'):null),
                 "altFormat": 'yy-mm-dd',
                 "dateFormat": '{$js_date_format}',
-                "minDate": {$offset},
+                "minDate": '{$min_date}',
                 "numberOfMonths": (multiple_dates === false ? 1 : [2,3]),
                 "onSelect": function (dateText) {
                     var date = container.datepicker('getDate');
@@ -1247,7 +1258,7 @@ HTML;
                     var day_type = dayType(date);
                     var day = (date.getDay() + 6) % 7;
                     if (interval && interval.length) {
-                        var interval_options = interval? interval.find('option'):[]
+                        var interval_options = interval? interval.find('option'):[];
                         /** @var int day week day */
                         var timestamp = date.getTime();
                         available = false;

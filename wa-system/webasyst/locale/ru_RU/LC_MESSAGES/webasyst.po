@@ -2,8 +2,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: WebAsyst\n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2020-02-21 12:02+0300\n"
-"Last-Translator: \n"
+"PO-Revision-Date: 2020-09-23 10:43+0300\n"
+"Last-Translator: Webasyst\n"
 "Language-Team: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
@@ -12,7 +12,7 @@ msgstr ""
 "X-Poedit-SourceCharset: utf-8\n"
 "X-Poedit-Basepath: .\n"
 "Language: ru_RU\n"
-"X-Generator: Poedit 1.8.7.1\n"
+"X-Generator: Poedit 2.3\n"
 "X-Poedit-SearchPath-0: .\n"
 "X-Poedit-SearchPath-1: .\n"
 
@@ -2716,6 +2716,9 @@ msgstr "Кейси"
 msgid "Davis"
 msgstr "Дэвис"
 
+msgid "Yangon"
+msgstr "Янгон"
+
 msgid "DumontDUrville"
 msgstr "Дюмон-Дюрвиль"
 
@@ -3832,8 +3835,14 @@ msgstr "Настройки оформления (theme.xml)"
 msgid "You did not modify this file"
 msgstr "Вы не вносили изменения в этот файл"
 
-msgid "%s and %d more unmodified files"
-msgstr "%s и еще %d не измененных файлов"
+msgid "%s and %s"
+msgstr "%s и %s"
+
+msgid "%d more non-modified file"
+msgid_plural "%d more non-modified files"
+msgstr[0] "еще %d неизмененный файл"
+msgstr[1] "еще %d неизмененных файла"
+msgstr[2] "еще %d неизмененных файлов"
 
 msgid "You modified this file"
 msgstr "Вы вносили изменения в этот файл"
@@ -4330,8 +4339,8 @@ msgstr "Тестовый отправитель"
 msgid "When this option is selected messages are sent by the default transport specified in the Webasyst framework configuration."
 msgstr "При выборе этого варианта рассылки будут отправляться транспортом по умолчанию, указанным в конфигурации фреймворка Вебасист."
 
-msgid "Some web-hosting companies allow sending email message by means of this transport only. If it is required to specify additional parameters for the mail() function you can enter them in the provided text field. The default parameters are -f%s."
-msgstr "Некоторые хостинг-провайдеры позволяют отправлять электронные сообщения только этим транспортом. Если имеется необходимость ввести дополнительные параметры, их можно указать в текстовом поле при выборе варианта «PHP-функция mail()». По умолчанию используется параметр -f%s."
+msgid "Some web-hosting companies allow sending email messages by means of this transport only. If it is required to specify additional parameters for the mail() function enter them below. The default parameters are -f%s."
+msgstr "Некоторые хостинг-провайдеры позволяют отправлять электронные сообщения только этим транспортом. Если нужно использовать дополнительные параметры при вызове функции mail(), укажите их ниже. По умолчанию используются параметры -f%s."
 
 msgid "This is a default command for sending email in UNIX-like operating systems. You can edit it to use a different command for sending messages if you are an experienced server administrator."
 msgstr "Это стандартная команда для отправки email-сообщений на UNIX-хостингах. Ее можно изменить на другую системную команду для отправки сообщений, если вы самостоятельно администрируете работу сервера."
@@ -4591,11 +4600,11 @@ msgstr "Предварительный просмотр"
 msgid "Preview SMS-message \"<span class=\"js-template-name\"></span>\""
 msgstr "Предварительный просмотр SMS-сообщения «<span class=\"js-template-name\"></span>»"
 
-msgid "Checking the sending of SMS-messages"
+msgid "Checking the sending of SMS messages"
 msgstr "Проверка отправки SMS-сообщений"
 
-msgid "Checking the sending of Email message"
-msgstr "Проверка отправки Email сообщения"
+msgid "Checking the sending of email messages"
+msgstr "Проверка отправки email-сообщений"
 
 msgid "Recipient's phone number"
 msgstr "Телефон получателя"
@@ -5008,8 +5017,8 @@ msgstr "Интервал в секундах перед отправкой сл�
 msgid "Re-sending of verification code"
 msgstr "Повторная отправка кода подтверждения"
 
-msgid "To learn more details about this error, enable the debug mode in Settings app and reload this page."
-msgstr "Чтобы получить больше информации об ошибке, включите режим отладки в приложении «Настройки» и обновите эту страницу."
+msgid "To learn more details about this error, enable the debug mode in Settings app, or change '<code>debug</code>' parameter to <code>true</code> in <em style=\"white-space: nowrap\">wa-config/config.php</em> file, and reload this page."
+msgstr "Чтобы получить больше информации об ошибке, включите режим отладки в приложении «Настройки» или измените значение параметра '<code>debug</code>' на <code>true</code> в файле <em style=\"white-space: nowrap\">wa-config/config.php</em> и обновите эту страницу."
 
 msgid "Please contact server administrator."
 msgstr "Обратитесь к администратору сервера."
@@ -5413,8 +5422,8 @@ msgstr "(отправлен в SMS)"
 msgid "API key"
 msgstr "Ключ API"
 
-msgid "Obtain an API key on the <a href=\"https://developer.tech.yandex.ru/\" target=\"_blank\">developer dashboard</a>. Select “JavaScript API, Geocoding API” option."
-msgstr "Получите ключ API в <a href=\"https://developer.tech.yandex.ru/\" target=\"_blank\">кабинете разработчика</a>. Выберите тип карт «JavaScript API и HTTP Геокодер»."
+msgid "Obtain an API key on the <a href=\"https://developer.tech.yandex.ru/\" target=\"_blank\">developer dashboard</a>. Select “<strong>JavaScript API, Geocoding API</strong>” option."
+msgstr "Получите ключ API в <a href=\"https://developer.tech.yandex.ru/\" target=\"_blank\">кабинете разработчика</a>. Выберите тип карт «<strong>JavaScript API и HTTP Геокодер</strong>»."
 
 msgid "“Address” is a complex field, which cannot be completely disabled; you can only edit its components listed below."
 msgstr "Поле «Адрес» — составное, его нельзя полностью отключить, но можно редактировать его составляющие, перечисленные ниже."
@@ -5478,6 +5487,9 @@ msgstr "Проверьте также в разделе «<a href=\"%s\">%s</a>�
 
 msgid "Email notifications must be enabled."
 msgstr "Email-уведомления должны быть включены."
+
+msgid "SMS notifications must be enabled."
+msgstr "SMS-уведомления должны быть включены."
 
 msgid "Email address is not valid."
 msgstr "Email-адрес введен неверно."
@@ -5727,9 +5739,9 @@ msgstr ""
 
 msgid "%d hour"
 msgid_plural "%d hours"
-msgstr[0] ""
-msgstr[1] ""
-msgstr[2] ""
+msgstr[0] "%d час"
+msgstr[1] "%d часа"
+msgstr[2] "%d часов"
 
 msgid "Scheduled tasks"
 msgstr "Задачи по расписанию"
@@ -5775,3 +5787,462 @@ msgstr "Для добавления поддержки эмодзи таблиц
 
 msgid "Click the button below to start the conversion."
 msgstr "Запустите смену кодировки с помощью кнопки внизу."
+
+msgid "National direct-dialing code (NDD)"
+msgstr "Код междугородней связи"
+
+msgid "Enter the NDD code which is used for making calls within your country."
+msgstr "Введите код, с помощью которого совершаются междугородние звонки в вашей стране. Пример кода для Российской Федерации: 8."
+
+msgid "The NDD, if specified, will be replaced with the country code in website visitors’ phone numbers."
+msgstr "Если указан код междугородней связи, то в номерах посетителей сайта он будет заменен на телефонный код страны."
+
+msgid "Country code"
+msgstr "Код страны"
+
+msgid "Enter your country’s phone number code to be used in website visitors’ phone numbers instead of the NDD."
+msgstr "Международный код вашей страны, который будет использоваться в телефонных номерах посетителей сайта вместо кода междугородней связи."
+
+msgid "Enter digits only"
+msgstr "Введите только цифры"
+
+msgid "Unknown error"
+msgstr "Неизвестная ошибка"
+
+msgid "Saving error"
+msgstr "Ошибка сохранения"
+
+msgid "Enable authorization by phone number"
+msgstr "Включить вход по номеру телефона"
+
+msgid "Sign-in with Webasyst ID"
+msgstr "Вход с Webasyst ID"
+
+msgid "Will close in"
+msgstr "Закроется через"
+
+msgid "sec"
+msgstr "сек"
+
+msgid "Got it"
+msgstr "Понятно"
+
+msgid "has been successfully connected to account"
+msgstr "успешно подключен для аккаунта"
+
+msgid "Leave as it is"
+msgstr "Оставить как есть"
+
+msgid "Confirm"
+msgstr "Подтвердить"
+
+msgid "Webasyst ID account <i class=\"icon16 userpic20\" style=\"background-image: url(%s);\"></i> <strong>%s</strong> is already connected to user <i class=\"icon16 userpic20\" style=\"background-image: url(%s);\"></i> <strong>%s</strong>"
+msgstr "Аккаунт Webasyst ID <i class=\"icon16 userpic20\" style=\"background-image: url(%s);\"></i> <strong>%s</strong> уже подключен для пользователя бекенда <i class=\"icon16 userpic20\" style=\"background-image: url(%s);\"></i> <strong>%s</strong>."
+
+msgid "Change connection to a new user?"
+msgstr "Изменить подключение на нового пользователя?"
+
+msgid "If you need to change the connection of your Webasyst ID account to user <strong>%s</strong>, press “Confirm”."
+msgstr "Если вам необходимо изменить подключение вашего аккаунта Webasyst ID на пользователя <strong>%s</strong>, нажмите «Подтвердить»."
+
+msgid "Invalid or expired state"
+msgstr "Недействительное или просроченное состояние"
+
+msgid "Sorry, the login has failed."
+msgstr "Извините, авторизация не удалась."
+
+msgid "is connected"
+msgstr "подключен"
+
+msgid "is not connected"
+msgstr "не подключен"
+
+msgid "Disconnect"
+msgstr "Отключить"
+
+msgid "Connect"
+msgstr "Подключить"
+
+msgid "%sRead more%s."
+msgstr "%sПодробнее%s."
+
+msgid "is disabled"
+msgstr "отключен"
+
+msgid "Disable"
+msgstr "Отключить"
+
+msgid "Enable"
+msgstr "Включить"
+
+msgid "More info"
+msgstr "Подробнее"
+
+msgid "Disable sign in with Webasyst ID"
+msgstr "Отключить вход с Webasyst ID"
+
+msgid "Sign-in with Webasyst ID has been disabled."
+msgstr "Вход с Webasyst ID отключен."
+
+msgid "Failed to disable sign-in with Webasyst ID."
+msgstr "Не удалось отключить вход с Webasyst ID."
+
+msgid "Enable sign-in with Webasyst ID"
+msgstr "Подключить вход с Webasyst ID"
+
+msgid "Sign-in with Webasyst ID has been enabled."
+msgstr "Вход с Webasyst ID подключен."
+
+msgid "Connecting to the Webasyst ID authentication server..."
+msgstr "Подключение к серверу авторизации Webasyst ID..."
+
+msgid "Failed to connect to Webasyst ID authentication server."
+msgstr "Не удалось подключиться к серверу авторизации Webasyst ID."
+
+msgid "Connect my Webasyst ID account"
+msgstr "Подключить мой аккаунт Webasyst ID"
+
+msgid "<strong>Enable sign-in with Webasyst ID</strong>, a universal authorization option that unites Webasyst Customer Center and backend sign-in on your custom domains. Webasyst ID allows you to use all Webasyst apps, sites, and services, and to avoid the use of different passwords on various domains."
+msgstr "<strong>Подключите вход с Webasyst ID</strong> — единый способ авторизации, который объединяет вход в бекенд Webasyst на вашем сайте, Центр заказчика Webasyst, все приложения, сайты и сервисы экосистемы Webasyst."
+
+msgid "Enable&nbsp;Webasyst&nbsp;ID on %s — it’s free and secure!"
+msgstr "Подключить&nbsp;Webasyst&nbsp;ID на %s — бесплатно и безопасно!"
+
+msgid "<strong>Upgrade your user account (%s) to Webasyst ID</strong>, a unified authorization across all Webasyst apps, sites, and services. It’s free, secure, and takes just a minute."
+msgstr "<strong>Подключите для своего аккаунта (%s) вход с помощью Webasyst ID</strong> — единой системы авторизации, объединяющей Центр заказчика Webasyst, мобильные приложения, сайты и сервисы Webasyst. Подключение займет всего минуту."
+
+msgid "Enable&nbsp;Webasyst&nbsp;ID for %s now!"
+msgstr "Подключить&nbsp;Webasyst&nbsp;ID для %s сейчас!"
+
+msgid "How does it work?"
+msgstr "Как это работает?"
+
+msgid "What is Webasyst ID?"
+msgstr "Что такое Webasyst ID?"
+
+msgid "What is it?"
+msgstr "Что это?"
+
+msgid "Sign in with"
+msgstr "Войти с"
+
+msgid "Enable sign in with"
+msgstr "Подключить вход с"
+
+msgid "Unknown authorization error. Sign in with a login and a password."
+msgstr "Неизвестная ошибка авторизации. Войдите с помощью имени и пароля."
+
+msgid "Connect your Webasyst ID account and sign into the backend securely with no extra passwords."
+msgstr "Подключите свой аккаунт Webasyst ID и входите в бекенд с его помощью без лишних паролей."
+
+msgid "Go to the Webasyst Customer Center"
+msgstr "Перейти в Центр заказчика Webasyst"
+
+msgid "Failed to log into the Webasyst Customer Center"
+msgstr "Не удалось войти в Центр заказчика Webasyst"
+
+msgid "User revoked permission to log into the Webasyst Customer Center"
+msgstr "Пользователь отозвал разрешение на переход в Центр заказчика Webasyst"
+
+msgid "Disconnect Webasyst ID account"
+msgstr "Отключить аккаунт Webasyst ID"
+
+msgid "The user will be able to connect a Webasyst ID account again at any time."
+msgstr "Пользователь сможет снова подключить свой аккаунт Webasyst ID в любое время."
+
+msgid "What is Webasyst ID"
+msgstr "Что такое Webasyst ID"
+
+msgid "1. Customer Center &rarr; Webasyst ID"
+msgstr "1. Центр заказчика &rarr; Webasyst ID"
+
+msgid "Based on a Webasyst Customer Center account, Webasyst ID is a unified secure authorization option, <strong>a single password</strong> for all Webasyst apps, sites, and backends — including those that work on your own domains."
+msgstr "Webasyst ID — это <strong>аккаунт в Центре заказчика Webasyst</strong> и вход с его помощью во все приложения и на все сайты, где вы работаете с Webasyst — как в облаке, так и на собственном хостинге."
+
+msgid "2. Start using Webasyst ID"
+msgstr "2. Как подключить"
+
+msgid "To enable Webasyst ID, simply sign in with your Webasyst Customer Center account <strong>just once</strong>. The system will connect everything automatically and will then allow you to quickly sign into your backend using your single Webasyst ID password. If you do not remember your Customer Center account details, simply <a href=\"https://www.webasyst.com/my/forgotpassword/\">recover the password</a> or <a href=\"https://www.webasyst.com/my/signup/\">create an account for free</a>."
+msgstr "Чтобы подключить вход с Webasyst ID, нужно всего лишь <strong>один раз связать</strong> вход на сайте с вашим аккаунтом в Центре заказчика. Система свяжет авторизацию и позволит в будущем входить везде с единым паролем. Если вы не помните, как войти в Центр заказчика, <a href=\"https://www.webasyst.ru/my/forgotpassword/\">восстановите свой пароль</a> или <a href=\"https://www.webasyst.ru/my/signup/\">зарегистрируйтесь</a>. Это бесплатно."
+
+msgid "3. Personal Webasyst ID for each user"
+msgstr "3. У каждого пользователя — свой Webasyst ID"
+
+msgid "If you are working together with your team then each of your teammates will be able to use their own Webasyst ID. All access rights remain unchanged while users get an option to log in with a new single password."
+msgstr "Если вы работаете в команде, то каждый сотрудник сможет использовать свой личный Webasyst ID. Все права доступа останутся без изменений, но каждый пользователь сможет входить со своим новым единым паролем."
+
+msgid "4. Why this is useful"
+msgstr "4. Для чего это нужно"
+
+msgid "With Webasyst ID, it is much more convenient to use the entire Webasyst <strong>ecosystem of apps and plugins</strong>, communicate with developers and get support, manage your Webasyst customer assets such as software licenses, cloud accounts, domain names, and purchases. A single account for everything."
+msgstr "Webasyst ID — самый удобный способ работы со всей <strong>экосистемой приложений и плагинов Webasyst</strong>, общения с разработчиками, обращения в поддержку, управления активами Webasyst: лицензиями, хостингом и облаком, доменными именами. Один аккаунт для всех сервисов."
+
+msgid "5. Will I retain the usual login option?"
+msgstr "5. Можно ли будет вернуться к обычному способу входа?"
+
+msgid "Yes, you will be able to use it as before. Simply enter your user name and password as usual, without selecting the Webasyst ID login option."
+msgstr "Да, такая возможность у вас останется. Для этого нужно просто вводить свои имя пользователя и пароль, как обычно, — не выбирая вход через Webasyst ID."
+
+msgid "Next"
+msgstr "Далее"
+
+msgid "Finish"
+msgstr "Завершить"
+
+msgid "Sign in without Webasyst ID"
+msgstr "Войти без подключения Webasyst ID"
+
+msgid "Sign in and connect Webasyst ID"
+msgstr "Войти и подключить Webasyst ID"
+
+msgid "Webasyst ID account %s is not connected to any backend user."
+msgstr "Аккаунт Webasyst ID %s не связан ни с одним пользователем бекенда."
+
+msgid "Sign in with a login name or email address to connect the account:"
+msgstr "Чтобы подключить аккаунт, войдите с логином или email-адресом:"
+
+msgid "Failed to get Webasyst ID account data from the Webasyst resource server."
+msgstr "Не удалось получить данные аккаунта Webasyst ID с сервера ресурсов Webasyst."
+
+msgid "“"
+msgstr "«"
+
+msgid "”"
+msgstr "»"
+
+msgid "will get:"
+msgstr "получит:"
+
+msgid "Connected: all team users"
+msgstr "Подключились все пользователи команды"
+
+msgid "Connected: ** from %d team user"
+msgid_plural "Connected: ** from %d team users"
+msgstr[0] "Подключились: ** из %d пользователя команды"
+msgstr[1] "Подключились: ** из %d пользователей команды"
+msgstr[2] "Подключились: ** из %d пользователей команды"
+
+msgid "Connected users"
+msgstr "Подключенные пользователи"
+
+msgid "No users have connected Webasyst ID"
+msgstr "Пока нет пользователей, подключивших Webasyst ID"
+
+msgid "Last sign-in with Webasyst ID"
+msgstr "Последний вход с Webasyst ID"
+
+msgid "Specified URL already exists."
+msgstr "Указанный URL уже существует."
+
+msgid "No SMS notifications template group is selected."
+msgstr "Не выбрана группа шаблонов SMS-уведомлений."
+
+msgid "Specified password is too long."
+msgstr "Указан слишком длинный пароль."
+
+msgid "Anti-CSRF protection."
+msgstr "Защита от CSRF-атак."
+
+msgid "This may be caused by a server error, or by a limitation on the allowed number of POST variables or their values size. Try to increase the values of “max_input_vars” and “post_max_size” parameters in PHP configuration or other similar parameters in you web server configuration."
+msgstr "Это может быть вызвано серверной ошибкой или ограничением на допустимое количество переменных в POST-запросах либо на размер их значений. Попробуйте увеличить значения параметров max_input_vars и post_max_size в конфигурации PHP или других подобных параметров в конфигурации веб-сервера."
+
+msgid "This design theme does not have its own settings. Try to export the parent theme’s settings."
+msgstr "У этой темы дизайна нет собственных настроек. Попробуйте экспортировать настройки родительской темы."
+
+msgid "A password cannot be empty."
+msgstr "Пароль не может быть пустым."
+
+msgid "The design theme preview will not work on your domain name <strong id=\"wa-preview-domain\"></strong> if it is not available via HTTPS protocol. If so then please either install an SSL certificate for your domain name or log into your Webasyst backend on that domain to preview a design theme."
+msgstr "Предварительный просмотр темы дизайна не будет работать на доменном имени <strong id=\"wa-preview-domain\"></strong>, если оно недоступно по протоколу HTTPS. Если это так, то для предпросмотра темы дизайна либо установите SSL-сертификат для этого домена, либо войдите в свой Webasyst на этом домене."
+
+msgid "Unknown error from Webasyst ID server."
+msgstr "Неизвестная ошибка с сервера Webasyst ID."
+
+msgid "This is a custom file and it will not be affected by the update."
+msgstr "Это пользовательский файл, и он не будет затронут обновлением."
+
+msgid "Restoring of missing database indices and AUTO_INCREMENT values"
+msgstr "Восстановление отсутствующих индексов и значений AUTO_INCREMENT"
+
+msgid "Table name"
+msgstr "Имя таблицы"
+
+msgid "Query"
+msgstr "Запрос"
+
+msgid "Fix selected tables"
+msgstr "Исправить выбранные таблицы"
+
+msgid "Fix all listed tables"
+msgstr "Исправить все перечисленные таблицы"
+
+msgid "Update all database tables"
+msgstr "Обновить все таблицы базы данных"
+
+msgid "No errors found."
+msgstr "Неполадки не найдены."
+
+msgid "Database indices and AUTO_INCREMENT repair tool"
+msgstr "Исправление индексов таблиц базы данных и AUTO_INCREMENT"
+
+msgid "Indices and AUTO_INCREMENT values will be restored <strong>only for selected tables</strong>."
+msgstr "Индексы и значения AUTO_INCREMENT будут восстановлены <strong>только для выбранных таблиц</strong>."
+
+msgid "Indices and AUTO_INCREMENT values will be restored for <strong>all tables listed on this page</strong>."
+msgstr "Индексы и значения AUTO_INCREMENT будут восстановлены <strong>для всех таблиц, перечисленных на этой странице</strong>."
+
+msgid "Indices and AUTO_INCREMENT values will be <strong>removed and restored for all tables in the database</strong>."
+msgstr "Индексы и значения AUTO_INCREMENT будут <strong>удалены и восстановлены для всех таблиц базы данных</strong>."
+
+msgid "Upgrade to Webasyst ID"
+msgstr "Вход с Webasyst ID"
+
+msgid "Connect Webasyst ID"
+msgstr "Подключить Webasyst ID"
+
+msgid "It is your personal account in Webasyst Customer Center, via which you can quickly access Webasyst apps either in the Cloud or on your own server."
+msgstr "Это ваш личный кабинет в Центре заказчика Webasyst, через который можно быстро переходить к работе с приложениями Webasyst в облаке или на своем хостинге."
+
+msgid "With Webasyst ID, it is convenient to access your apps and data, communicate with software developers, contact Webasyst support team, and manage your Webasyst client assets such as software licenses, Cloud accounts, or domain names. It is a universal login option to use all Webasyst apps and services."
+msgstr "Через Webasyst ID удобно работать с приложениями и управлять своим сайтом, общаться с разработчиками программных продуктов, обращаться в службу поддержки и управлять своими активами клиента Webasyst: лицензиями, хостингом, облаком, доменными именами. Это единый способ входа для использования всех приложений и сервисов Webasyst."
+
+msgid "How to use it?"
+msgstr "Как этим пользоваться?"
+
+msgid "Simply click the Webasyst login button, which will appear on your website’s backend authorization page. You won’t even need to enter a password if you recently signed into your Customer Center account."
+msgstr "Используйте кнопку для входа с Webasyst, которая появится на странице входа на ваш сайт. А если вы недавно уже входили в Центр заказчика Webasyst, то вам даже не придётся вводить пароль."
+
+msgid "Will I be able to use again the ordinary login option, without Webasyst ID?"
+msgstr "Можно ли будет вернуться к обычному способу входа &mdash; без Webasyst ID?"
+
+msgid "Yes, just enter your login name and password as usual."
+msgstr "Да, для этого просто вводите свои имя пользователя и пароль так, как вы привыкли."
+
+msgid "%s prompts you to upgrade your account on %s with the Webasyst ID secure login option — a single sign in system across all Webasyst apps, sites, and services. Confirm the upgrade for %s by linking it with your existing Webasyst ID account or by creating a new one. It’s free and secure!"
+msgstr "%s предлагает вам подключить для вашего аккаунта на сайте %s вход с помощью Webasyst ID — единой безопасной системы авторизации для всех приложений, сайтов и сервисов на основе Webasyst. Подтвердите подключение, связав аккаунт %s с ранее созданным Webasyst ID или зарегистрировав новый. Это быстро и бесплатно!"
+
+msgid "for login as %s%s"
+msgstr "для пользователя %s%s"
+
+msgid "[Action Required] %s invites you to upgrade to Webasyst ID on %s"
+msgstr "[Требуется подтверждение] %s приглашает вас подключить Webasyst ID для входа на сайте %s"
+
+msgid "Already bound"
+msgstr "Уже привязан"
+
+msgid "Invitation token is invalid."
+msgstr "Недействительный токен приглашения."
+
+msgid "Invited contact doesn't exist."
+msgstr "Приглашенный контакт не существует."
+
+msgid "Client ID"
+msgstr "ID клиента"
+
+msgid "Client secret"
+msgstr "Секретный код клиента"
+
+msgid "Connecting my Webasyst ID account"
+msgstr "Подключение моего аккаунта Webasyst ID"
+
+msgid "If you disable sign-in with Webasyst ID, all configured user associations with Webasyst ID accounts will be deleted. Users will not be able to sign into the backend with Webasyst ID."
+msgstr "Если вы отключите вход с Webasyst ID, то все настроенные связи пользователей с аккаунтами Webasyst ID будут удалены. Пользователи не смогут входить в бекенд с Webasyst ID."
+
+msgid "Disable Webasyst ID for everyone"
+msgstr "Отключить Webasyst ID для всех"
+
+msgid "Image processing library"
+msgstr "Механизм обработки изображений"
+
+msgid "not installed"
+msgstr "не устновлен"
+
+msgid "Disable Webasyst ID sign-in for all users"
+msgstr "Отключить вход с Webasyst ID для всех пользователей"
+
+msgid "<strong>Sign-in with Webasyst ID</strong> is a universal authorization option that unites Webasyst Customer Center and sign-in to Webasyst backends on your own domains."
+msgstr "<strong>Вход с Webasyst ID</strong> — это универсальный способ входа, объединяющий Центр заказчика Webasyst и вход в бекенд Webasyst на ваших личных доменах."
+
+msgid "Webasyst ID allows you to use all Webasyst apps, sites, and services, and to avoid the use of different passwords on various domains."
+msgstr "Webasyst ID позволяет пользоваться всеми приложениями, сайтами и сервисами Webasyst и при этом избежать использования разных паролей на разных доменах."
+
+msgid "Pending upgrade to Webasyst ID"
+msgstr "Ожидающие подключения к Webasyst ID"
+
+msgid "Sending invitations. Please don’t leave this page until the process is completed."
+msgstr "Приглашения отправляются. Не закрывайте эту страницу до завершения процесса."
+
+msgid "Awaiting the user to confirm"
+msgstr "Ожидание подтверждения пользователем"
+
+msgid "Connect Webasyst ID for my account"
+msgstr "Подключить Webasyst ID для моего аккаунта"
+
+msgid "Email upgrade instructions"
+msgstr "Отправить инструкцию по переходу по email"
+
+msgid "Email again"
+msgstr "Отправить еще раз"
+
+msgid "An invitation has been sent"
+msgstr "Приглашение отправлено"
+
+msgid "User email is unknown."
+msgstr "Email-адрес пользователя неизвестен."
+
+msgid "Successfully upgraded to Webasyst ID"
+msgstr "Успешно подключены к Webasyst ID"
+
+msgid "all users!"
+msgstr "все пользователи!"
+
+msgid "Webasyst ID"
+msgstr "Webasyst ID"
+
+msgid "Allow users to use their Webasyst ID accounts to sign into the backend:"
+msgstr "Разрешить пользователям использовать их аккаунты Webasyst ID для входа в бекенд:"
+
+msgid "Enable Webasyst ID"
+msgstr "Включить Webasyst ID"
+
+msgid "and email invitations to users for fast upgrade"
+msgstr "и отправить пользователям email-приглашения с ссылкой для быстрого подключения"
+
+msgid "Should the sending of email invitations fail, users will still see a notification with an upgrade link in the backend. Users will also have the option to enable or disable the sign-in with Webasyst ID in their profiles."
+msgstr "Если email-приглашения не будут отправлены или получены, пользователи все равно увидят в бекенде уведомление со ссылкой для подключения. Пользователи также могут самостоятельно подключать или отключать вход с Webasyst ID в своем профиле."
+
+msgid "%d user"
+msgid_plural "%d users"
+msgstr[0] "%d пользователь"
+msgstr[1] "%d пользователя"
+msgstr[2] "%d пользователей"
+
+msgid "Association with a Webasyst ID account will be deleted. The user will not be able to sign into the backend with Webasyst ID."
+msgstr "Связь с аккаунтом Webasyst ID будет удалена. Пользователь не сможет входить в бекенд с Webasyst ID."
+
+msgid "User not found."
+msgstr "Пользователь не найден."
+
+msgid "Sending failure."
+msgstr "Ошибка отправки."
+
+msgid "%d invitation email has been sent."
+msgid_plural "%d invitation emails have been sent."
+msgstr[0] "Отправлено %d приглашение."
+msgstr[1] "Отправлены %d приглашения."
+msgstr[2] "Отправлено %d приглашений."
+
+msgid "%s and %d more unmodified file"
+msgid_plural "%s and %d more unmodified files"
+msgstr[0] "%s и еще %d неизмененный файл"
+msgstr[1] "%s и еще %d неизмененный файла"
+msgstr[2] "%s и еще %d неизмененный файлов"
+
+msgid "Association with Webasyst ID account will be deleted. The user will not be able to sign into the backend with Webasyst ID."
+msgstr "Связь с аккаунтом Webasyst ID будет удалена. Пользователь не сможет входить в бекенд с Webasyst ID."
+
+msgid "The system sender email address is not configured. Save it in “<a href=\"%s\">Email settings</a>” section."
+msgstr "Не настроен системный email-адрес отправителя. Сохраните его в разделе «<a href=\"%s\">Настройки email</a>»."
+
+msgid "Disable sign-in with Webasyst ID"
+msgstr "Отключить вход с Webasyst ID"

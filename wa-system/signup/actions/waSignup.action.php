@@ -875,17 +875,22 @@ class waSignupAction extends waViewAction
         // See below onetime_password validation
         if ($this->auth_config->getField('password') && !$onetime_password_need) {
 
-            // check required
-            if (!isset($errors['password']) && !$data['password']) {
-                $errors['password'] = array();
-                $errors['password_confirm']['required'] = _ws('Password can not be empty.');
-            }
-
-            // check passwords
-            if (!isset($errors['password']) && $data['password'] !== $data['password_confirm']) {
-                $errors['password'] = (array)ifset($errors['password']);
-                $errors['password_confirm'] = (array)ifset($errors['password_confirm']);
-                $errors['password_confirm']['not_match'] = _ws('Passwords do not match');
+            if (!isset($errors['password'])) {
+                if (!$data['password']) {
+                    // check required
+                    $errors['password'] = array();
+                    $errors['password_confirm']['required'] = _ws('A password cannot be empty.');
+                } elseif ($data['password'] !== $data['password_confirm']) {
+                    // check passwords match
+                    $errors['password'] = (array)ifset($errors['password']);
+                    $errors['password_confirm'] = (array)ifset($errors['password_confirm']);
+                    $errors['password_confirm']['not_match'] = _ws('Passwords do not match');
+                } elseif (strlen($data['password']) > waAuth::PASSWORD_MAX_LENGTH) {
+                    // check passwords length
+                    $errors['password'] = (array)ifset($errors['password']);
+                    $errors['password_confirm'] = (array)ifset($errors['password_confirm']);
+                    $errors['password_confirm']['too_long'] = _ws('Specified password is too long.');
+                }
             }
 
         }
@@ -900,7 +905,7 @@ class waSignupAction extends waViewAction
 
         // check captcha
         if ($this->auth_config->getSignUpCaptcha()) {
-            if (!wa()->getCaptcha()->isValid()) {
+            if (!wa()->getCaptcha(['app_id' => $this->auth_config->getApp()])->isValid()) {
                 $errors['captcha'] = _ws('Invalid captcha');
             }
         }
@@ -1384,7 +1389,10 @@ class waSignupAction extends waViewAction
 
         // try auth new contact if needed
         if ($need_auth) {
-            return $this->tryAuthContact($contact);
+            $auth_result = $this->tryAuthContact($contact);
+            if ($auth_result) {
+                $this->afterAuth();
+            }
         }
 
         return true;
@@ -1659,7 +1667,8 @@ class waSignupAction extends waViewAction
                 $sent = $channel->sendOnetimePasswordMessage($address, array(
                     'site_url' => $this->auth_config->getSiteUrl(),
                     'site_name' => $this->auth_config->getSiteName(),
-                    'login_url' => $this->auth_config->getLoginUrl(array(), true)
+                    'login_url' => $this->auth_config->getLoginUrl(array(), true),
+                    'use_session' => true
                 ));
 
             } elseif ($channel->isSMS() && !empty($addresses['phone'])) {
@@ -1757,6 +1766,14 @@ class waSignupAction extends waViewAction
      * @param waContact $contact
      */
     protected function afterSignup(waContact $contact)
+    {
+
+    }
+
+    /**
+     * After successful auth
+     */
+    protected function afterAuth()
     {
 
     }

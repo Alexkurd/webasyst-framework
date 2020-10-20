@@ -84,7 +84,8 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
             'Currency'    => ifset(self::$currencies[$this->currency_id]),
             'OrderId'     => $this->app_id.'_'.$this->merchant_id.'_'.$order_data['order_id'],
             'CustomerKey' => $c->getId(),
-            'Description' => $order_data['summary'],
+            'Description' => ifempty($order_data, 'summary', ''),
+            'PayType'     => $this->two_steps ? 'T' : 'O',
             'DATA'        => array(
                 'Email' => $email,
             ),
@@ -103,6 +104,10 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
             if (!$args['Receipt']) {
                 return 'Данный вариант платежа недоступен. Воспользуйтесь другим способом оплаты.';
             }
+        }
+
+        if ($this->getSettings('payment_language') == 'en') {
+            $args['Language'] = 'en';
         }
 
         try {
@@ -216,16 +221,27 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
 
         $api_url = $this->getEndpointUrl().$method;
 
-        $net = new waNet(array(
+        $options = array(
             'request_format' => 'json',
             'format'         => waNet::FORMAT_JSON,
             'verify'         => false,
-        ));
+        );
 
-        $log = array();
+        if (class_exists('tinkofftestNet')) {
+            $net = new tinkofftestNet($options);
+        } else {
+            $net = new waNet($options);
+        }
+
+        $log = array(
+            'method' => __METHOD__,
+            'url' => $api_url,
+            'request' => $request,
+        );
         try {
 
             $response = $net->query($api_url, $request, waNet::METHOD_POST);
+            $log['response'] = $response;
 
             if (!empty($response['ErrorCode'])) {
                 $message = sprintf(
@@ -247,19 +263,20 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
             }
 
         } catch (Exception $ex) {
-            $log += array(
-                'message' => $ex->getMessage(),
-                'request' => $request,
-            );
+            $log['message'] = $ex->getMessage();
             if (empty($log['response'])) {
                 $log['raw_response'] = $net->getResponse(true);
             }
-
             $log['response_headers'] = $net->getResponseHeader();
 
             self::log($this->id, $log);
 
             throw $ex;
+        }
+
+        if ($this->isTestMode()) {
+            $log['testmode'] = 'Extra logging enabled';
+            static::log($this->id, $log);
         }
 
         return $response;
@@ -376,7 +393,7 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
             );
 
             if (isset($transaction_raw_data['refund_description'])) {
-                $args['Description'] = $transaction_raw_data['refund_description'];
+                $args['Description'] = ifempty($transaction_raw_data['refund_description'], '');
             }
 
             $items = ifset($transaction_raw_data, 'refund_items', array());
@@ -403,13 +420,6 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
                 'description' => '',
             );
             $now = date('Y-m-d H:i:s');
-
-            $amount = $transaction_raw_data['transaction']['amount'];
-
-            if (isset($res['OriginalAmount']) && isset($res['NewAmount'])) {
-                $amount = ($res['OriginalAmount'] - $res['NewAmount']) / 100;
-            }
-
             $transaction = array(
                 'native_id'       => $transaction_raw_data['transaction']['native_id'],
                 'type'            => self::OPERATION_REFUND,
@@ -417,7 +427,7 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
                 'result'          => 1,
                 'order_id'        => $transaction_raw_data['transaction']['order_id'],
                 'customer_id'     => $transaction_raw_data['transaction']['customer_id'],
-                'amount'          => $amount,
+                'amount'          => $amount/100,
                 'currency_id'     => $transaction_raw_data['transaction']['currency_id'],
                 'parent_id'       => $transaction_raw_data['transaction']['id'],
                 'create_datetime' => $now,
@@ -444,7 +454,15 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
                 unset($res['TerminalKey']);
             }
 
-            $this->saveTransaction($transaction, $res);
+            $this->saveTransaction($transaction, [
+                // used by $this->formalizeData() and eventually by waPayment->isRefundAvailable()
+                // to calculate how large should total refund be
+                'captured_amount' => round((
+                    $transaction_raw_data['transaction']['amount'] +
+                    ifset($transaction_raw_data, 'transaction', 'refunded_amount', 0)
+                )*100),
+                'Amount' => $amount,
+            ] + $res);
 
             return $response;
         } catch (Exception $ex) {
@@ -475,7 +493,7 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
             'Currency'    => ifset(self::$currencies[$this->currency_id]),
             'OrderId'     => $this->app_id.'_'.$this->merchant_id.'_'.$order_data['order_id'],
             'CustomerKey' => $c->getId(),
-            'Description' => $order_data['summary'],
+            'Description' => ifempty($order_data, 'summary', ''),
             'DATA'        => array(
                 'Email' => $email,
             ),
@@ -552,33 +570,51 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
 
     public function capture($data)
     {
-
         $args = array(
             'PaymentId' => $data['transaction']['native_id'],
             'Amount'    => $data['transaction']['amount'] * 100,
         );
+
+        if (!empty($data['order_data'])) {
+            $order = waOrder::factory($data['order_data']);
+
+            if ($data['transaction']['currency_id'] != $order->currency) {
+                throw new waPaymentException(sprintf('Currency id changed. Expected %s, but get %s.', $data['transaction']['currency_id'], $order->currency));
+            }
+
+            $args['Amount'] = round($order->total*100);
+
+            if ($this->getSettings('atolonline_on')) {
+                $args['Receipt'] = $this->getReceiptData($order);
+            }
+        }
+
+        // Callbacks from Tinkoff API are pretty fast and often come before
+        // the call to /Confirm endpoint returns.
+        // We create wa_transaction record beforehand so that
+        // the callback is ignored
+        $datetime = date('Y-m-d H:i:s');
+        $transaction_model = new waTransactionModel();
+        $transaction = $this->saveTransaction([
+            'native_id'       => $data['transaction']['native_id'],
+            'type'            => self::OPERATION_CAPTURE,
+            'result'          => 'unfinished',
+            'order_id'        => $data['transaction']['order_id'],
+            'customer_id'     => $data['transaction']['customer_id'],
+            'amount'          => $args['Amount'] / 100,
+            'currency_id'     => $data['transaction']['currency_id'],
+            'parent_id'       => $data['transaction']['id'],
+            'create_datetime' => $datetime,
+            'update_datetime' => $datetime,
+            'state'           => $data['transaction']['state'],
+        ]);
+
         try {
             $res = $this->apiQuery('Confirm', $args);
 
             $response = array(
                 'result'      => 0,
                 'description' => '',
-            );
-
-            $datetime = date('Y-m-d H:i:s');
-
-            $transaction = array(
-                'native_id'       => $data['transaction']['native_id'],
-                'type'            => self::OPERATION_CAPTURE,
-                'result'          => 1,
-                'order_id'        => $data['transaction']['order_id'],
-                'customer_id'     => $data['transaction']['customer_id'],
-                'amount'          => $data['transaction']['amount'],
-                'currency_id'     => $data['transaction']['currency_id'],
-                'parent_id'       => $data['transaction']['id'],
-                'create_datetime' => $datetime,
-                'update_datetime' => $datetime,
-                'state'           => self::STATE_CAPTURED,
             );
 
             $status = ifset($res, 'Status', '');
@@ -590,14 +626,22 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
                 $transaction['view_data'] = ifset($res['Details']);
                 $response['result'] = -1;
                 $response['description'] = $transaction['error'];
+            } else {
+                $transaction['result'] = 1;
+                $transaction['state'] = self::STATE_CAPTURED;
             }
 
             $transaction['parent_state'] = $transaction['state'];
 
+            $transaction_model->deleteById($transaction['id']);
+            unset($transaction['id']);
             $response['data'] = $this->saveTransaction($transaction, $res);
 
             return $response;
         } catch (Exception $ex) {
+            if (isset($transaction['id'])) {
+                $transaction_model->deleteById($transaction['id']);
+            }
             return null;
         }
     }
@@ -680,9 +724,20 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
 
             case 'PARTIAL_REFUNDED':
                 $transaction_data['type'] = self::OPERATION_REFUND;
-                if (!empty($data['OriginalAmount']) && !empty($data['NewAmount'])) {
-                    $transaction_data['refunded_amount'] = (intval($data['OriginalAmount']) - intval($data['NewAmount'])) / 100;
+                // 'refunded_amount' is used by waPayment->isRefundAvailable()
+                // It contains total amount refunded so far, including by this transaction.
+                if (!empty($data['NewAmount'])) {
+                    if (!empty($data['captured_amount'])) {
+                        // for partially-captured orders
+                        // 'captured_amount' contains amount captured, this may differ from `OriginalAmount`
+                        $transaction_data['refunded_amount'] = (intval($data['captured_amount']) - intval($data['NewAmount'])) / 100;
+                    } else if (!empty($data['OriginalAmount'])) {
+                        // for fully-captured orders
+                        // (old plugin versions did not write `captured_amount` to raw data)
+                        $transaction_data['refunded_amount'] = (intval($data['OriginalAmount']) - intval($data['NewAmount'])) / 100;
+                    }
                 }
+
                 break;
 
             case 'REFUNDED':
@@ -731,29 +786,49 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
 
     private function translateError($error_code)
     {
-        $errors = array(
-            0    => null,
-            99   => 'Воспользуйтесь другой картой — банк, выпустивший карту, отклонил операцию.',
-            101  => 'Не пройдена идентификация 3DS.',
-            1006 => 'Проверьте реквизиты или воспользуйтесь другой картой.',
-            1012 => 'Воспользуйтесь другой картой.',
-            1013 => 'Повторите попытку позже.',
-            1014 => 'Неверно введены реквизиты карты. Проверьте корректность введенных данных.',
-            1030 => 'Повторите попытку позже.',
-            1033 => 'Проверьте реквизиты или воспользуйтесь другой картой.',
-            1034 => 'Воспользуйтесь другой картой — банк, выпустивший карту, отклонил операцию.',
-            1041 => 'Воспользуйтесь другой картой — банк, выпустивший карту, отклонил операцию.',
-            1043 => 'Воспользуйтесь другой картой — банк, выпустивший карту, отклонил операцию.',
-            1051 => 'Недостаточно средств на карте.',
-            1054 => 'Проверьте реквизиты или воспользуйтесь другой картой.',
-            1057 => 'Воспользуйтесь другой картой — банк, выпустивший карту, отклонил операцию.',
-            1065 => 'Воспользуйтесь другой картой — банк, выпустивший карту, отклонил операцию.',
-            1082 => 'Проверьте реквизиты или воспользуйтесь другой картой.',
-            1089 => 'Воспользуйтесь другой картой — банк, выпустивший карту, отклонил операцию.',
-            1091 => 'Воспользуйтесь другой картой.',
-            1096 => 'Повторите попытку позже.',
-            9999 => 'Внутренняя ошибка системы.',
-        );
+        $errors = [
+            7 => 'Покупатель не найден',
+            53 => 'Обратитесь к продавцу',
+            100 => 'Повторите попытку позже',
+            101 => 'Не пройдена идентификация 3DS',
+            102 => 'Операция отклонена, пожалуйста обратитесь в интернет-магазин или воспользуйтесь другой картой',
+            103 => 'Повторите попытку позже',
+            119 => 'Превышено кол-во запросов на авторизацию',
+            1001 => 'Свяжитесь с банком, выпустившим карту, чтобы провести платеж',
+            1003 => 'Неверный merchant ID',
+            1004 => 'Карта украдена. Свяжитесь с банком, выпустившим карту',
+            1005 => 'Платеж отклонен банком, выпустившим карту',
+            1006 => 'Свяжитесь с банком, выпустившим карту, чтобы провести платеж',
+            1007 => 'Карта украдена. Свяжитесь с банком, выпустившим карту',
+            1012 => 'Такие операции запрещены для этой карты',
+            1013 => 'Повторите попытку позже',
+            1014 => 'Карта недействительна. Свяжитесь с банком, выпустившим карту',
+            1015 => 'Попробуйте снова или свяжитесь с банком, выпустившим карту',
+            1030 => 'Повторите попытку позже',
+            1033 => 'Истек срок действия карты. Свяжитесь с банком, выпустившим карту',
+            1034 => 'Попробуйте повторить попытку позже',
+            1041 => 'Карта утеряна. Свяжитесь с банком, выпустившим карту',
+            1043 => 'Карта украдена. Свяжитесь с банком, выпустившим карту',
+            1051 => 'Недостаточно средств на карте',
+            1054 => 'Истек срок действия карты',
+            1057 => 'Такие операции запрещены для этой карты',
+            1058 => 'Такие операции запрещены для этой карты',
+            1059 => 'Подозрение в мошенничестве. Свяжитесь с банком, выпустившим карту',
+            1061 => 'Превышен дневной лимит платежей по карте',
+            1062 => 'Платежи по карте ограничены',
+            1063 => 'Операции по карте ограничены',
+            1065 => 'Превышен дневной лимит транзакций',
+            1075 => 'Превышено число попыток ввода ПИН-кода',
+            1082 => 'Неверный CVV',
+            1088 => 'Ошибка шифрования. Попробуйте снова',
+            1089 => 'Попробуйте повторить попытку позже',
+            1091 => 'Банк, выпустивший карту недоступен для проведения авторизации',
+            1093 => 'Подозрение в мошенничестве. Свяжитесь с банком, выпустившим карту',
+            1094 => 'Системная ошбка',
+            1096 => 'Повторите попытку позже',
+            9999 => 'Внутренняя ошибка системы',
+        ];
+
         return array_key_exists($error_code, $errors) ? $errors[$error_code] : 'Неизвестная ошибка ('.$error_code.').';
     }
 
@@ -794,7 +869,7 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
             }
             foreach ($order->items as $item) {
                 $item['amount'] = $item['price'] - ifset($item['discount'], 0.0);
-                if ($item['price'] > 0) {
+                if ($item['price'] > 0 && $item['quantity'] > 0) {
 
                     switch (ifset($item['type'])) {
                         case 'shipping':
@@ -892,5 +967,10 @@ class tinkoffPayment extends waPayment implements waIPayment, waIPaymentRefund, 
         $settings['terminal_key'] = trim($settings['terminal_key']);
         $settings['terminal_password'] = trim($settings['terminal_password']);
         return parent::saveSettings($settings);
+    }
+
+    protected function isTestMode()
+    {
+        return $this->testmode || 'DEMO' === substr($this->getSettings('terminal_key'), -4);
     }
 }

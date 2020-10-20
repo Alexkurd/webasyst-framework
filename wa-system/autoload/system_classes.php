@@ -54,6 +54,7 @@ return array(
     'waViewAction'                      => 'controller/waViewAction.class.php',
     'waViewActions'                     => 'controller/waViewActions.class.php',
     'waViewController'                  => 'controller/waViewController.class.php',
+    'waDispatch'                        => 'controller/waDispatch.class.php',
     'waWidget'                          => 'widget/waWidget.class.php',
 
     'waCurrency'                        => 'currency/waCurrency.class.php',
@@ -118,7 +119,7 @@ return array(
     'waFrontendLoginForm'          => 'login/classes/login/waFrontendLoginForm.class.php',
 
     // forgotpassword
-    'waForgotPasswordForm'         => 'login/classes/forgotpassword/waForgotPasswordForm.class.php',
+    'waForgotPasswordForm'              => 'login/classes/forgotpassword/waForgotPasswordForm.class.php',
     'waBackendForgotPasswordForm'       => 'login/classes/forgotpassword/waBackendForgotPasswordForm.class.php',
     'waFrontendForgotPasswordForm'      => 'login/classes/forgotpassword/waFrontendForgotPasswordForm.class.php',
 
@@ -217,5 +218,24 @@ return array(
 
     'waMapAdapter'                      => 'map/waMapAdapter.class.php',
     'waDisabledMapAdapter'              => 'map/adapters/waDisabledMapAdapter.class.php',
+
+    // <WEBASYST ID MODULE>
+
+    'waWebasystIDConfig'                       => 'waid/waWebasystIDConfig.class.php',
+    'waWebasystIDException'                    => 'waid/exceptions/waWebasystIDException.class.php',
+    'waWebasystIDAuthException'                => 'waid/exceptions/waWebasystIDAuthException.class.php',
+    'waWebasystIDAccessDeniedAuthException'    => 'waid/exceptions/waWebasystIDAccessDeniedAuthException.class.php',
+    'waWebasystIDClientManager'                => 'waid/waWebasystIDClientManager.class.php',
+    'waWebasystIDAuthAdapter'                  => 'waid/waWebasystIDAuthAdapter.class.php',
+    'waWebasystIDAuth'                         => 'waid/waWebasystIDAuth.class.php',
+    'waWebasystIDWAAuth'                       => 'waid/waWebasystIDWAAuth.class.php',
+    'waWebasystIDSiteAuth'                     => 'waid/waWebasystIDSiteAuth.class.php',
+    'waWebasystIDWAAuthController'             => 'waid/waWebasystIDWAAuthController.class.php',
+    'waWebasystIDAccessTokenManager'           => 'waid/waWebasystIDAccessTokenManager.class.php',
+    'waWebasystIDApi'                          => 'waid/waWebasystIDApi.class.php',
+    'waWebasystIDCustomerCenterAuthController' => 'waid/waWebasystIDCustomerCenterAuth.controller.php',
+    'waWebasystIDUserInviting'                 => 'waid/waWebasystIDUserInviting.class.php'
+
+    // </WEBASYST ID MODULE>
 );
 

@@ -492,6 +492,12 @@ table.zebra tr.selected .s-single-line:after {
   background-size: contain;
   background-position: center;
 }
+.icon16.ws.waid {
+  background-image: url("../../img/wa-settings/ws-waid.svg");
+}
+.icon16.ws.waid-green {
+  background-image: url("../../img/wa-settings/ws-waid-green.svg");
+}
 .s-email-settings-page .s-settings-items .s-item:hover > .s-remove {
   opacity: 0.6;
   -ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=60)";
@@ -784,12 +790,16 @@ table.zebra tr.selected .s-single-line:after {
 .s-auth-settings-page .s-auth-settings-fields-block .s-auth-config-params {
   border-bottom: 1px solid #ccc;
 }
-.s-auth-settings-page .s-auth-settings-fields-block .s-auth-config-params .s-auth-method {
-  margin-bottom: 22px;
+.s-auth-settings-page .s-auth-settings-fields-block .s-channel-template-diagnostic-messages {
+  margin: 10px 0;
 }
-.s-auth-settings-page .s-auth-settings-fields-block .s-auth-config-params .s-auth-method .s-template-link {
+.s-auth-settings-page .s-auth-settings-fields-block .s-channel-template-diagnostic-messages .s-error-help-text-wrapper {
+  margin: 5px 0;
+}
+.s-auth-settings-page .s-auth-settings-fields-block .s-phone-channel-settings-block {
   margin: 8px 0;
 }
+.s-auth-settings-page .s-auth-settings-fields-block .s-login-by-phone-toggle,
 .s-auth-settings-page .s-auth-settings-fields-block .s-rememberme-toogle {
   display: inline-block;
   margin-right: 6px;
@@ -1200,4 +1210,120 @@ table.zebra tr.selected .s-single-line:after {
   100% {
     color: #222;
   }
+}
+.s-waid-settings-page .s-page-header .s-waid-disconnect {
+  color: #555;
+  font-size: 15px;
+  font-weight: normal;
+  text-decoration: none;
+  display: inline-block;
+  float: right;
+}
+.s-waid-settings-page .s-page-header .s-waid-disconnect .icon16 {
+  margin-top: 6px;
+}
+.s-waid-settings-page h2 {
+  margin-bottom: 1.5rem;
+}
+.s-waid-settings-page .s-connected-users tr {
+  padding: 5px;
+}
+.s-waid-settings-page .s-connected-users tr th {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: bold;
+  background: transparent;
+  border: 0 none;
+}
+.s-waid-settings-page .s-connected-users tr th:nth-child(1) {
+  width: 32px;
+}
+.s-waid-settings-page .s-connected-users tr th:nth-child(2) {
+  width: 15%;
+}
+.s-waid-settings-page .s-connected-users tr th:nth-child(3) {
+  width: 15%;
+}
+.s-waid-settings-page .s-connected-users tr td img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50px;
+}
+.s-waid-settings-page a.bold {
+  font-weight: bold;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block {
+  margin-bottom: 70px;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-waid-description-block .s-description {
+  margin-top: 10px;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-not-connected-users {
+  width: 70%;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-not-connected-users tr {
+  padding: 5px;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-not-connected-users tr th {
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: bold;
+  background: transparent;
+  border: 0 none;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-not-connected-users tr th:nth-child(1) {
+  width: 32px;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-not-connected-users tr th:nth-child(2) {
+  width: 50%;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-not-connected-users tr th:nth-child(3) {
+  width: 50%;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-not-connected-users tr th:nth-child(4) {
+  min-width: 150px;
+}
+.s-waid-settings-page .s-waid-not-connected-users-block .s-not-connected-users tr td img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50px;
+}
+.s-waid-settings-page .s-waid-not-connected-block .w-waid-connect-panel {
+  margin-top: 10px;
+  display: table;
+}
+.s-waid-settings-page .s-waid-not-connected-block .w-waid-connect-panel .w-waid-connect-button-block,
+.s-waid-settings-page .s-waid-not-connected-block .w-waid-connect-panel .w-waid-upgrade-checkbox-block,
+.s-waid-settings-page .s-waid-not-connected-block .w-waid-connect-panel .w-waid-upgrade-hint-block {
+  display: table-cell;
+}
+.s-waid-settings-page .s-waid-not-connected-block .w-waid-connect-panel .w-waid-connect-button-block {
+  white-space: nowrap;
+}
+.s-waid-settings-page .s-waid-not-connected-block .w-waid-connect-panel .w-waid-upgrade-checkbox-block {
+  padding: 15px 10px 0 20px;
+}
+.s-waid-settings-page .s-waid-invite-progressbar-wrapper {
+  margin-bottom: 10px;
+}
+.s-waid-settings-page .s-waid-invite-progressbar-wrapper .s-waid-invite-progressbar {
+  margin: 0 10px 10px 0;
+  min-width: 500px;
+  display: inline-block;
+}
+.s-waid-settings-page .s-waid-invite-progressbar-wrapper .s-waid-invite-progressbar .progressbar-inner {
+  width: 0;
+}
+.s-waid-settings-page .s-waid-invite-progressbar-wrapper .s-waid-icon {
+  margin-top: 18px;
+}
+.s-waid-settings-page .s-waid-invite-progressbar-wrapper .s-waid-report {
+  margin-left: 2px;
+  font-weight: bold;
+}
+.s-waid-settings-page .s-waid-invite-progressbar-wrapper .errormsg {
+  margin-left: 2px;
+}
+.s-waid-settings-page .hidden {
+  display: none;
 }

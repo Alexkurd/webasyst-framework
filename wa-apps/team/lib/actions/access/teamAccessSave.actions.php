@@ -63,6 +63,11 @@ class teamAccessSaveActions extends waJsonActions
             $this->contact['login'] = $login;
             $this->contact['password'] = $password;
             $this->saveContact();
+
+            // set rights right away
+            if ($this->getRequest()->post('set_rights')) {
+                $this->rightsAction();
+            }
         }
     }
 
@@ -107,7 +112,7 @@ class teamAccessSaveActions extends waJsonActions
         }
 
         if ($action === 'remove' && !$token_id) {
-            return $this->errors[] = _w('Token not transferred');
+            return $this->errors[] = _w('The token was not transferred.');
         } else {
             return $api_token_model->deleteByField(array('contact_id' => $this->contact->getId(), 'token' => $token_id));
         }
@@ -127,7 +132,7 @@ class teamAccessSaveActions extends waJsonActions
         if ($another_user) {
             $another_user['login'] = $login;
             $this->errors[] = sprintf_wp(
-                'This login is already set for user %s',
+                'This login name is already being used by user %s.',
                 sprintf(
                     '<a href="%s">%s</a>',
                     teamUser::link($another_user),
@@ -151,6 +156,10 @@ class teamAccessSaveActions extends waJsonActions
         }
         if ($password !== $password_confirmation) {
             $this->errors[] = _w('Passwords do not match.');
+            return null;
+        }
+        if (strlen($password) > waAuth::PASSWORD_MAX_LENGTH) {
+            $this->errors[] = _w('Specified password is too long.');
             return null;
         }
         return $password;

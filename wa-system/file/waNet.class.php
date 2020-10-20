@@ -94,7 +94,11 @@ class waNet
     /**
      * waNet constructor.
      * @param array $options key => value format
+     *      - $options['format'] - expected format of response
+     *      - $options['request_format'] - format of request data
+     *      ...
      * @param array $custom_headers key => value format
+     * @throws waException
      */
     public function __construct($options = array(), $custom_headers = array())
     {
@@ -511,7 +515,7 @@ class waNet
         return false;
     }
 
-    private function runCurl($url, $params, $method, $curl_options = array(), $callback = null)
+    protected function runCurl($url, $params, $method, $curl_options = array(), $callback = null)
     {
         $this->getCurl($url, $params, $method, $curl_options);
         if (!empty($callback) && is_callable($callback) && !empty(self::$namespace) && !empty(self::$mh[self::$namespace])) {
@@ -613,6 +617,8 @@ class waNet
             curl_multi_close(self::$mh[$namespace]);
             unset(self::$mh[$namespace]);
         }
+
+        self::$master_options = [];
     }
 
     private function getCurl($url, $content, $method, $curl_options = array())
@@ -740,11 +746,9 @@ class waNet
             }
 
             if (empty($curl_options[CURLOPT_POST]) && empty($curl_options[CURLOPT_POSTFIELDS])) {
-                if (version_compare(PHP_VERSION, '5.4', '>=') || (!ini_get('safe_mode') && !ini_get('open_basedir'))) {
-                    $curl_options[CURLOPT_FOLLOWLOCATION] = true;
-                }
-
-                if (version_compare(PHP_VERSION, '5.4', '>=') || (!ini_get('safe_mode') && !ini_get('open_basedir'))) {
+                if (!ini_get('safe_mode') && !ini_get('open_basedir')) {
+                    // This is a useful option to have, but it is disabled in paranoid environments
+                    // (which emits a warning). Also, does not apply to POST requests.
                     $curl_options[CURLOPT_FOLLOWLOCATION] = true;
                 }
             }
@@ -762,7 +766,7 @@ class waNet
         wa()->getStorage()->close();
     }
 
-    private function runStreamContext($url, $content, $method)
+    protected function runStreamContext($url, $content, $method)
     {
         $context = $this->getStreamContext($content, $method);
         $response = @file_get_contents($url, false, $context);
@@ -876,7 +880,7 @@ class waNet
      * @return bool|string
      * @throws waException
      */
-    private function runSocketContext($url, $content, $method)
+    protected function runSocketContext($url, $content, $method)
     {
         $host = parse_url($url, PHP_URL_HOST);
 
@@ -1020,5 +1024,13 @@ class waNet
             'raw'              => $this->raw_response,
             'preview'          => $this->decoded_response,
         );
+    }
+
+    public function getResponseDebugInfo()
+    {
+        return [
+            'headers' => $this->response_header,
+            'body'    => $this->raw_response,
+        ];
     }
 }

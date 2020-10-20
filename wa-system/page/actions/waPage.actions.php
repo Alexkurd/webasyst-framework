@@ -449,6 +449,51 @@ class waPageActions extends waActions
         if (empty($domain)) throw new waException(_ws('Unknown page domain'));
         if (empty($route)) throw new waException(_ws('Unknown page route'));
 
+        $page_model = $this->getPageModel();
+        $domain_field = $page_model->getDomainField();
+        if ($domain_field == 'domain_id') {
+            if (!empty($data['domain_id'])) {
+                $domain_name = $data['domain_id'];
+            } elseif (!empty($page['domain_id'])) {
+                $domain_name = $page['domain_id'];
+            } elseif (!empty($parent['domain_id'])) {
+                $domain_name = $parent['domain_id'];
+            }
+        } else {
+            $domain_name = $domain;
+        }
+
+        $full_url = '';
+        if (!empty($parent['full_url'])) {
+            if (substr($parent['full_url'], -1) == '/') {
+                $full_url = $parent['full_url'];
+            } else {
+                $full_url = $parent['full_url'] . '/';
+            }
+        }
+
+        if (isset($page)) {
+            $full_url .= $data['url'];
+        } elseif (substr($data['url'], -1) == '/') {
+            $full_url .= $data['url'];
+        } else {
+            $full_url .= $data['url'] . '/';
+        }
+
+        $same_url = $page_model->getByField(array(
+            $domain_field => $domain_name,
+            'route' => $route,
+            'full_url' => $full_url,
+        ), true);
+
+        if (!empty($same_url)) {
+            foreach ($same_url as $page) {
+                if ($page['id'] != $id) {
+                    throw new waException(_ws('Specified URL already exists.'));
+                }
+            }
+        }
+
         $page_url = str_replace('*', '', $route) . $page_url;
         $domain_routes = wa()->getRouting()->getRoutes($domain);
 

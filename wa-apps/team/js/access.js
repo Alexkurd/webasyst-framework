@@ -496,7 +496,7 @@ window.AccessDialog = ( function($) {
 
         var promise = setAppRight(access_code);
 
-        if (access_id == "limited") {
+        if (access_id === "limited") {
             promise = promise.then( function() {
                 var $form = that.$limitedContent.find("form");
                 return $.post($form.attr('action'), $form.serialize(), 'json');
@@ -598,9 +598,17 @@ window.ProfileAccessTab = function(o) { "use strict";
     initFormChangeLogin();
     initFormChangePassword();
     initApiTokensEditor();
+
     if (!o.is_own_profile) {
         initToggleBan(o.wa_url, o.wa_framework_version);
     }
+
+    if (o.is_own_profile) {
+        initWebasystIDAuth();
+    }
+
+    initWebasystIDUnbindAuth();
+    initWebasystIDHelpLink();
 
     initSelectorGlobalAccess(o.is_own_profile, o.contact_no_access, o.contact_groups_no_access);
     new UserAccessTable({
@@ -609,6 +617,27 @@ window.ProfileAccessTab = function(o) { "use strict";
         is_frame: true
     });
     return;
+
+    function initWebasystIDHelpLink() {
+        $('.js-webasyst-id-help-link').on('click', function (e) {
+            e.preventDefault();
+            window.top.$('body').trigger('wa_waid_help_link');
+        });
+    }
+
+    function initWebasystIDAuth() {
+        $('.js-webasyst-id-auth').on('click', function (e) {
+            e.preventDefault();
+            window.top.$('body').trigger('wa_webasyst_id_auth');
+        });
+    }
+    
+    function initWebasystIDUnbindAuth() {
+        $('.js-webasyst-id-unbind-auth').on('click', function (e) {
+            e.preventDefault();
+            window.top.$('.js-webasyst-id-unbind-auth').trigger('wa_waid_unbind_auth', {id: contact_id});
+        });
+    }
 
     function initApiTokensEditor() {
         var $wrapper = $('#tc-api-tokens-filed'),
@@ -712,7 +741,30 @@ window.ProfileAccessTab = function(o) { "use strict";
                 return false;
             }
 
-            $.post(form.attr('action'), form.serialize(), function (r) {
+            var data = form.serializeArray();
+            var $select = $('#c-access-rights-toggle');
+            if ($select.val() === '1') {
+                data = data.concat([
+                    {
+                        name: 'set_rights',
+                        value: '1'
+                    },
+                    {
+                        name: 'app_id',
+                        value: 'webasyst'
+                    },
+                    {
+                        name: 'name',
+                        value: 'backend'
+                    },
+                    {
+                        name: 'value',
+                        value: 1
+                    }
+                ]);
+            }
+
+            $.post(form.attr('action'), data, function (r) {
                 if (r.status === 'ok') {
                     form.hide();
                     login = new_login;
@@ -901,11 +953,13 @@ window.ProfileAccessTab = function(o) { "use strict";
             $('.c-shown-on-access').show();
         }
 
-        updateForm();
+        initForm();
+
         $confirm_wrapper.on('click', '.cancel', function() {
             $select.val(last_select_value);
             $confirm_wrapper.hide();
         });
+
         $confirm_wrapper.on('click', '.button', function() {
             $confirm_wrapper.hide();
             updateFormAndSave();
@@ -913,7 +967,7 @@ window.ProfileAccessTab = function(o) { "use strict";
 
         $select.change(function() {
             if (!login) {
-                updateForm();
+                initForm(true);
                 return;
             }
 
@@ -932,18 +986,24 @@ window.ProfileAccessTab = function(o) { "use strict";
         });
 
         function updateFormAndSave() {
-            if (updateForm()) {
+            if (initForm(true)) {
                 saveUserAccess();
             }
         }
 
-        function updateForm() {
+        /**
+         * @param {boolean|undefined} is_update - is form need to update after some state changed. On first init is_update must be FALSE (default)
+         * @return {boolean}
+         */
+        function initForm(is_update) {
             $('#c-access-rights-hint-warning').hide();
             $('#c-access-rights-hint-customize').hide();
+
             var new_select_value = $select.val();
             if (new_select_value === undefined) {
                 new_select_value = '1';
             }
+
             switch(new_select_value) {
                 case 'remove':
                     $('#c-credentials-block').hide();
@@ -968,7 +1028,13 @@ window.ProfileAccessTab = function(o) { "use strict";
                         return false;
                     } else {
                         if (login) {
-                            $('#c-access-rights-by-app').show();
+                            var $apps_access_rights = $('#c-access-rights-by-app');
+
+                            $apps_access_rights.show();
+                            if (is_update) {
+                                $apps_access_rights.find('.t-access-status').removeClass('type-no type-limited type-full').addClass('type-no');
+                            }
+
                             $('.c-shown-on-access').show();
                             $('#c-login-block').show();
                             $('#c-password-block').show();
@@ -1066,7 +1132,6 @@ window.ProfileAccessTab = function(o) { "use strict";
             }
         }
     }//}}}
-
 };
 
 /**

@@ -19,11 +19,13 @@
  */
 class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCancel, waIPaymentRefund, waIPaymentCapture
 {
-    private static $currencies = array(
+    protected static $currencies = array(
         'RUB',
         'EUR',
         'USD',
     );
+
+    const CHESTNYZNAK_PRODUCT_CODE = 'chestnyznak';
 
     public function getSettingsHTML($params = array())
     {
@@ -197,15 +199,25 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
     {
         try {
             $transaction = $transaction_raw_data['transaction'];
-            $hash = md5(var_export($transaction, true));
 
 
             $payment = $this->getPaymentInfo($transaction['native_id']);
 
             if (!empty($payment['status']) && ($payment['status'] === 'waiting_for_capture')) {
-                if ($this->receipt && !empty($payment['receipt'])) {
+
+
+                if (!empty($transaction_raw_data['order_data'])) {
+                    $order = waOrder::factory($transaction_raw_data['order_data']);
+                    //handle changed amount
+                    $transaction['amount'] = $order->total;
+                    $transaction['currency_id'] = $order->currency;
+                    $transaction['receipt'] = $this->getReceiptData($order);
+                } elseif ($this->receipt && !empty($payment['receipt'])) {
                     $transaction['receipt'] = $payment['receipt'];
                 }
+
+                $hash = md5(var_export($transaction, true));
+
                 $payment = $this->apiQuery('capture', $transaction, $hash);
                 $transaction_data = $this->formalizeData($payment);
             } else {
@@ -256,7 +268,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return array
      * @throws waPaymentException
      */
-    private function formatPaymentData(waOrder $order, $type)
+    protected function formatPaymentData(waOrder $order, $type)
     {
         $data = array(
             'amount'       => array(
@@ -284,7 +296,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
         );
 
         if (!empty($type)) {
-            $data['payment_method'] = array(
+            $data['payment_method_data'] = array(
                 'type' => $type,
             );
         }
@@ -307,7 +319,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return string
      * @throws waPaymentException
      */
-    private function getEndpointUrl($method, &$data)
+    protected function getEndpointUrl($method, &$data)
     {
         $url = 'https://payment.yandex.net/api/v3/';
         switch ($method) {
@@ -318,7 +330,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
             case 'capture': #https://payment.yandex.net/api/v3/payments/{payment_id}/capture
                 $url .= sprintf('payments/%s/capture ', $data['native_id']);
                 $data = array(
-                    'amount' => array(
+                    'amount'  => array(
                         'value'    => number_format($data['amount'], 2, '.', ''),
                         'currency' => $data['currency_id'],
                     ),
@@ -360,7 +372,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return array
      * @throws waException
      */
-    private function apiQuery($action, $data, $hash = null)
+    protected function apiQuery($action, $data, $hash = null)
     {
         if (empty($hash) && ($hash !== false)) {
             $hash = md5(var_export($data, true));
@@ -475,7 +487,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return array
      * @throws waException
      */
-    private function createPayment(waOrder $order, $type)
+    protected function createPayment(waOrder $order, $type)
     {
         #Payment data
         $data = $this->formatPaymentData($order, $type);
@@ -484,7 +496,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
         return $this->apiQuery('create', $data, $hash);
     }
 
-    private function getTransport($headers = array())
+    protected function getTransport($headers = array())
     {
         $options = array(
             'authorization'      => true,
@@ -504,7 +516,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return array
      * @throws waException
      */
-    private function getPaymentInfo($native_order_id)
+    protected function getPaymentInfo($native_order_id)
     {
         return $this->apiQuery('info', $native_order_id, false);
     }
@@ -515,7 +527,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return array
      * @throws waException
      */
-    private function getRefundInfo($native_refund_id)
+    protected function getRefundInfo($native_refund_id)
     {
         return $this->apiQuery('refunds_info', $native_refund_id, false);
     }
@@ -581,7 +593,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @param $payment
      * @return array
      */
-    private function handlePayment($payment)
+    protected function handlePayment($payment)
     {
         $transaction_data = $this->formalizeData($payment);
 
@@ -632,7 +644,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return array
      * @throws waException
      */
-    private function decodeRequest()
+    protected function decodeRequest()
     {
         $request = @file_get_contents("php://input");
         try {
@@ -720,14 +732,40 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      */
     protected function callbackHandlerRedirect($transaction_data, $request)
     {
+        $params = '';
         if ((ifset($request['action']) == 'PaymentFail') || (waRequest::get('result') == 'fail')) {
             $type = waAppPayment::URL_FAIL;
         } else {
+            if (isset($transaction_data['order_id']) && !empty($transaction_data['order_id'])) {
+                $fields = array(
+                    'plugin' => $this->id,
+                    'app_id' => $this->app_id,
+                    'merchant_id' => $this->merchant_id,
+                    'error' => null,
+                );
+                $fields['order_id'] = filter_var($transaction_data['order_id'], FILTER_SANITIZE_NUMBER_INT);
+                $transaction_model = new waTransactionModel();
+                $transaction = $transaction_model->getByFields($fields);
+                if (isset(end($transaction)['native_id']) && !empty(end($transaction)['native_id'])) {
+                    $native_id = end($transaction)['native_id'];
+                    $payment = $this->getPaymentInfo($native_id);
+                    if ($payment['status'] == 'pending' || $payment['status'] == 'canceled') {
+                        $transaction_data['error'] = _w('Вы отказались от совершения платежа. Повторите попытку позднее, пожалуйста.'); // max length 255 characters
+                        $transaction = $this->saveTransaction($transaction_data);
+                        $params = isset($transaction['id']) ? '&transaction_id=' .  $transaction['id'] : '';
+
+                        $type = waAppPayment::URL_DECLINE;
+                    }
+                }
+            }
+        }
+
+        if (!isset($type)) {
             $type = waAppPayment::URL_SUCCESS;
         }
 
         return array(
-            'redirect' => $this->getAdapter()->getBackUrl($type, $transaction_data),
+            'redirect' => $this->getAdapter()->getBackUrl($type, $transaction_data) . $params,
         );
     }
 
@@ -737,7 +775,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @throws waException
      * @throws waPaymentException
      */
-    private function getRefundReceiptData($data)
+    protected function getRefundReceiptData($data)
     {
         $receipt = null;
         $items = ifset($data, 'refund_items', array());
@@ -788,53 +826,109 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return array|null
      * @throws waPaymentException
      */
-    private function getReceiptData(waOrder $order)
+    protected function getReceiptData(waOrder $order)
     {
-        $receipt = null;
-        if ($this->receipt) {
-            $customer = array(
-                'email' => $order->getContactField('email'),
-            );
-            if ($phone = $order->getContactField('phone')) {
-                //TODO format ITU-T E.164
-                $customer['phone'] = sprintf('%s', preg_replace('@^8@', '7', $phone));
-            }
-
-            $customer = array_filter($customer);
-
-            if (!empty($customer)) {
-                $receipt = array(
-                    'customer' => $customer,
-                    'items'    => array(),
-                );
-                if ($this->tax_system_code) {
-                    $receipt['tax_system_code'] = $this->tax_system_code;
-                }
-
-                foreach ($order->items as $item) {
-                    $item['amount'] = round($item['price'], 2) - round(ifset($item['discount'], 0.0), 2);
-                    $receipt['items'][] = $this->formatReceiptItem($item, $order->currency);
-                    unset($item);
-                }
-
-                #shipping
-                if (($order->shipping) || strlen($order->shipping_name)) {
-                    $item = array(
-                        'quantity'     => 1,
-                        'name'         => mb_substr($order->shipping_name, 0, 128),
-                        'amount'       => round($order->shipping, 2),
-                        'tax_rate'     => $order->shipping_tax_rate,
-                        'tax_included' => ($order->shipping_tax_included !== null) ? $order->shipping_tax_included : true,
-                        'type'         => 'shipping',
-                    );
-                    $receipt['items'][] = $this->formatReceiptItem($item, $order->currency);
-                }
-                $receipt += $customer;
-            } else {
-                throw new waPaymentException('Empty customer data');
-            }
+        if (!$this->receipt) {
+            return null;
         }
+
+        // Customer contacts
+        $customer = array(
+            'email' => $order->getContactField('email'),
+        );
+        $phone = $order->getContactField('phone');
+        if ($phone) {
+            //TODO format ITU-T E.164
+            $customer['phone'] = sprintf('%s', preg_replace('@^8@', '7', $phone));
+        }
+
+        $customer = array_filter($customer);
+        if (empty($customer)) {
+            throw new waPaymentException('Empty customer data');
+        }
+
+        $receipt = array(
+            'customer' => $customer,
+            'items'    => array(),
+        );
+        if ($this->tax_system_code) {
+            $receipt['tax_system_code'] = $this->tax_system_code;
+        }
+
+        $receipt['items'] = $this->getReceiptItems($order);
+
+        #shipping
+        if (($order->shipping) || strlen($order->shipping_name)) {
+            $item = array(
+                'quantity'     => 1,
+                'name'         => mb_substr($order->shipping_name, 0, 128),
+                'amount'       => round($order->shipping, 2),
+                'tax_rate'     => $order->shipping_tax_rate,
+                'tax_included' => ($order->shipping_tax_included !== null) ? $order->shipping_tax_included : true,
+                'type'         => 'shipping',
+            );
+            $receipt['items'][] = $this->formatReceiptItem($item, $order->currency);
+        }
+
+        if (empty($receipt['items'])) {
+            throw new waPaymentException('Empty order items');
+        }
+
+        $receipt += $customer;
         return $receipt;
+    }
+
+    protected function getReceiptItems(waOrder $order)
+    {
+        $receipt_items = [];
+
+        foreach ($order->items as $item) {
+            $quantity = (int)ifset($item, 'quantity', 0);
+            if ($quantity <= 0) {
+                continue;
+            }
+            $item['amount'] = round($item['price'], 2) - round(ifset($item['discount'], 0.0), 2);
+
+            // possible splitting items into array of items
+            $items = [$item];
+
+            // "Честный знак" marking code for product item leads to splitting by 'quantity'
+            if ($item['type'] === 'product') {
+                $values = $this->getChestnyznakCodeValues($item['product_codes']);
+                if ($values) {
+                    $items = $this->splitItem($item, $values);
+                }
+            }
+
+            foreach ($items as $it) {
+                $receipt_items[] = $this->formatReceiptItem($it, $order->currency);
+            }
+
+            unset($item);
+        }
+
+        return $receipt_items;
+    }
+
+    /**
+     * Split one product item to several items because chestnyznak marking code must be related for single product instance
+     * Extend each new item with 'chestnyznak' value from $values
+     * Invariant $item['quantity'] === count($values)
+     * @param array $item - order item
+     * @param array $values - chestnyznak values
+     * @return array[] - array of items. Each item has 'product_code'
+     */
+    protected function splitItem(array $item, array $values)
+    {
+        $quantity = (int)ifset($item, 'quantity', 0);
+        $items = [];
+        for ($i = 0; $i < $quantity; $i++) {
+            $value = isset($values[$i]) ? $values[$i] : '';
+            $item['chestnyznak'] = $value;
+            $item['quantity'] = 1;
+            $items[] = $item;
+        }
+        return $items;
     }
 
     /**
@@ -844,12 +938,14 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return array
      * @throws waPaymentException
      */
-    private function formatReceiptItem($item, $currency)
+    protected function formatReceiptItem($item, $currency)
     {
         if (isset($item['tax_included']) && empty($item['tax_included']) && !empty($item['tax_rate'])) {
             $item['amount'] += round(floatval($item['tax_rate']) * $item['amount'] / 100.0, 2);
         }
-        switch (ifset($item['type'])) {
+
+        $type = ifset($item['type']);
+        switch ($type) {
             case 'shipping':
                 $item['payment_subject_type'] = $this->payment_subject_type_shipping;
                 break;
@@ -861,7 +957,8 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
                 $item['payment_subject_type'] = $this->payment_subject_type_product;
                 break;
         }
-        return array(
+
+        $result = [
             //Название товара (не более 128 символов).
             'description'     => mb_substr($item['name'], 0, 128),
             //Количество товара. Максимально возможное значение зависит от модели вашей онлайн-кассы.
@@ -875,7 +972,31 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
             'payment_subject' => $item['payment_subject_type'],
             //Признак способа расчета.
             'payment_mode'    => $this->payment_method_type,
-        );
+        ];
+
+        // Код товара — уникальный номер, который присваивается экземпляру товара при маркировке
+        // Тут идет конвертация из DataMatrix кода (Честный знак) в 1162 тег код для ККТ
+        if (isset($item['chestnyznak'])) {
+            $fiscal_code = $this->convertToFiscalCode($item['chestnyznak']);
+            if ($fiscal_code) {
+                $result['product_code'] = $fiscal_code;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Конвертация из DataMatrix кода (Честный знак) в 1162 тег код для ККТ
+     * @param $uid
+     * @return bool|string
+     */
+    protected function convertToFiscalCode($uid)
+    {
+        if (!class_exists('shopChestnyznakPluginCodeParser')) {
+            return false;
+        }
+        return shopChestnyznakPluginCodeParser::convertToFiscalCode($uid);
     }
 
     /**
@@ -884,7 +1005,7 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
      * @return int
      * @throws waPaymentException
      */
-    private function getTaxId($item)
+    protected function getTaxId($item)
     {
         $id = 1;
         switch ($this->taxes) {
@@ -1580,6 +1701,32 @@ class yandexkassaPayment extends waPayment implements waIPayment, waIPaymentCanc
         return $result;
     }
 
+    /**
+     * @param array<int, array> $item_product_codes - array of product code records indexed by id of record
+     *  id => [
+     *      int      'id'
+     *      string   'code'
+     *      string   'name' [optional]
+     *      string   'icon' [optional]
+     *      string   'logo' [optional]
+     *      string[] 'values' - promo code item value for each instance of product item
+     *  ]
+     * @return array - chestnyznak values
+     */
+    protected function getChestnyznakCodeValues(array $item_product_codes)
+    {
+        $values = [];
+        foreach ($item_product_codes as $product_code) {
+            if (isset($product_code['code']) && $product_code['code'] === self::CHESTNYZNAK_PRODUCT_CODE) {
+                if (isset($product_code['values'])) {
+                    $values = $product_code['values'];
+                    break;
+                }
+            }
+        }
+
+        return $values;
+    }
 
     public static function getCreditInfo($amount, $app_id = null, $id = null, $selector = null)
     {

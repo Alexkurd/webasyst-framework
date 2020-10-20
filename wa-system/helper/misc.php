@@ -232,7 +232,7 @@ function wa_is_int($val)
         $val = (string) $val;
         if (ctype_digit($val)) {
             return true;
-        } else if ($val && $val{0} == '-' && ctype_digit(substr($val, 1))) {
+        } else if ($val && $val[0] == '-' && ctype_digit(substr($val, 1))) {
             return true;
         }
     }
@@ -341,12 +341,10 @@ function wa_dump_helper(&$value, &$level_arr = array(), $cli = null)
         }
 
     } else {
-        $str = 'array';
-        if ($value) {
-            $str .= '(';
-        } else {
-            return $str.'()';
+        if (!$value) {
+            return '[]';
         }
+        $str = '[';
         $value_to_iterate =& $value;
     }
 
@@ -367,7 +365,7 @@ function wa_dump_helper(&$value, &$level_arr = array(), $cli = null)
     }
     array_pop($level_arr);
 
-    $str .= is_array($value) ? $br.')' : $br.'}';
+    $str .= is_array($value) ? $br.']' : $br.'}';
     return $str;
 }
 

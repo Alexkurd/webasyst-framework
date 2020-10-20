@@ -95,6 +95,8 @@ abstract class waBaseLoginAction extends waLoginModuleController
         $password = is_scalar($password) ? (string)$password : '';
         if (strlen($password) <= 0) {
             return _ws('Password is required');
+        } elseif (strlen($password) > waAuth::PASSWORD_MAX_LENGTH) {
+            return _ws('Specified password is too long.');
         } else {
             return null;
         }
@@ -110,7 +112,11 @@ abstract class waBaseLoginAction extends waLoginModuleController
         if (!$this->auth_config->needLoginCaptcha()) {
             return null;
         }
-        if (!wa()->getCaptcha()->isValid()) {
+        $captcha_options = [];
+        if ($this->auth_config instanceof waDomainAuthConfig) {
+            $captcha_options['app_id'] = $this->auth_config->getApp();
+        }
+        if (!wa()->getCaptcha($captcha_options)->isValid()) {
             return _ws('Invalid captcha');
         } else {
             return null;

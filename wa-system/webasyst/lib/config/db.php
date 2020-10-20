@@ -102,7 +102,6 @@ return array(
             'PRIMARY' => 'id',
             'login' => array('login', 'unique' => 1),
             'name' => 'name',
-            'id_name' => array('id', 'name'),
         ),
     ),
     'wa_contact_calendars' => array(
@@ -112,6 +111,7 @@ return array(
         'font_color' => array('varchar', 7),
         'sort' => array('int', 11, 'null' => 0, 'default' => '0'),
         'is_limited' => array('tinyint', 1, 'null' => 0, 'default' => '0'),
+        'default_status' => array('varchar', 255),
         ':keys' => array(
             'PRIMARY' => 'id',
         ),
@@ -238,6 +238,17 @@ return array(
         ':keys' => array(
             'PRIMARY' => array('contact_id', 'app_id', 'name'),
         ),
+    ),
+    'wa_contact_waid' => array(
+        'contact_id' => array('int', 11, 'null' => 0),
+        'token' => array('text', 'null' => 0),
+        'webasyst_contact_id' => array('int', 11, 'null' => 0),
+        'create_datetime' => array('datetime', 'null' => 0),
+        'login_datetime' => array('datetime'),
+        ':keys' => array(
+            'PRIMARY' => array('contact_id'),
+            'webasyst_contact_id' => array('webasyst_contact_id', 'unique' => 1)
+        )
     ),
     'wa_country' => array(
         'name' => array('varchar', 255, 'null' => 0),

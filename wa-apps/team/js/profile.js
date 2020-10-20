@@ -14,6 +14,12 @@ var Profile = ( function($) {
         that.api_enabled = ( window.history && window.history.pushState );
         that.user = options.user || { id: 0 };
         that.photo_dialog_url = options.photo_dialog_url;
+        that.is_own_profile = options.is_own_profile || false;
+        that.wa_app_url = options.wa_app_url || '';
+        that.backend_url = options.backend_url || '';
+        that.wa_url = options.wa_url || '';
+        that.wa_version = options.wa_version || '';
+        that.webasyst_id_auth_url = options.webasyst_id_auth_url || '';
 
         // DYNAMIC VARS
         that.is_locked = false;
@@ -30,6 +36,19 @@ var Profile = ( function($) {
         that.initEditableJobtitle();
         //
         that.bindEvents();
+        //
+        if ($.team && $.team.sidebar) {
+            $.team.sidebar.selectLink(false);
+        }
+
+        new ProfileWebasystID({
+            is_own_profile: that.is_own_profile,
+            user: that.user,
+            backend_url: that.backend_url,
+            wa_url: that.wa_url,
+            wa_version: that.wa_version,
+            webasyst_id_auth_url: that.webasyst_id_auth_url
+        });
     };
 
     Profile.prototype.bindEvents = function() {
@@ -145,11 +164,13 @@ var Profile = ( function($) {
         } else {
             $tab_a.click();
         }
-
+        
         // Animate scroll to tabs
-        $('html, body').animate({
-            scrollTop: $tab_a.offset().top
-        }, 500);
+        if ($tab_a.length) {
+            $('html, body').animate({
+                scrollTop: $tab_a.offset().top
+            }, 500);
+        }
 
         return deferred.promise();
 

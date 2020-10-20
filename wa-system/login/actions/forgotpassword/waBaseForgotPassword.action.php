@@ -267,9 +267,18 @@ abstract class waBaseForgotPasswordAction extends waLoginModuleController
         }
         if ($password !== $password_confirm) {
             $errors['password_confirm'] = _ws('Passwords do not match');
+        } elseif (strlen($password) > waAuth::PASSWORD_MAX_LENGTH) {
+            $errors['password'] = _ws('Specified password is too long.');
         }
-        if ($this->auth_config->needLoginCaptcha() && !wa()->getCaptcha()->isValid()) {
-            $errors['captcha'] = _ws('Invalid captcha');
+
+        if ($this->auth_config->needLoginCaptcha()) {
+            $captcha_options = [];
+            if ($this->auth_config instanceof waDomainAuthConfig) {
+                $captcha_options['app_id'] = $this->auth_config->getApp();
+            }
+            if (!wa()->getCaptcha($captcha_options)->isValid()) {
+                $errors['captcha'] = _ws('Invalid captcha');
+            }
         }
         return $errors;
     }
@@ -612,19 +621,19 @@ abstract class waBaseForgotPasswordAction extends waLoginModuleController
 
             // diagnostic log print
             if ($channel->isEmail()) {
-                $diagnostic_message = "Couldn't send recovery password email message. Check email settings.\n%s";
+                $diagnostic_message = "Could not send password recovery message by email. Check email settings.\n%s";
                 $this->logError(
                     sprintf($diagnostic_message, $channel->getDiagnostic()),
                     array('line' => __LINE__, 'file' => __FILE__)
                 );
             } elseif ($channel->isSMS()) {
-                $diagnostic_message = "Couldn't send recovery password sms message. Explore sms.log for details.\n%s";
+                $diagnostic_message = "Could not send password recovery message by SMS. View sms.log file for details.\n%s";
                 $this->logError(
                     sprintf($diagnostic_message, $channel->getDiagnostic()),
                     array('line' => __LINE__, 'file' => __FILE__)
                 );
             } else {
-                $diagnostic_message = "Couldn't send recovery password.\n%s";
+                $diagnostic_message = "Could not send password recovery message.\n%s";
                 $this->logError(
                     sprintf($diagnostic_message, $channel->getDiagnostic()),
                     array('line' => __LINE__, 'file' => __FILE__)

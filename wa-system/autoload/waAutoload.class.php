@@ -166,7 +166,9 @@ class waAutoload
     {
         if (is_array($class)) {
             foreach ($class as $class_name => $path) {
-                $this->classes[$class_name] = $path;
+                if (!isset($this->classes[$class_name])) {
+                    $this->classes[$class_name] = $path;
+                }
             }
         } else {
             $this->classes[$class] = $path;
@@ -184,5 +186,37 @@ class waAutoload
             $result[$class] = 'wa-system/'.$path;
         }
         return $result;
+    }
+
+
+
+    public function getClassByFilename($filename, $namespace)
+    {
+        $file_parts = explode('.', $filename);
+        if (count($file_parts) <= 2) {
+            return false;
+        }
+        array_pop($file_parts);
+        $class = null;
+        switch (end($file_parts)) {
+            case 'handler':
+                $class = $namespace;
+                for ($i = 0; $i < count($file_parts); $i++) {
+                    $class .= ucfirst($file_parts[$i]);
+                }
+                break;
+            case 'class':
+                $class = $file_parts[0];
+                break;
+            case 'trait':
+            case 'interface':
+            default:
+                $class = $file_parts[0];
+                for ($i = 1; $i < count($file_parts); $i++) {
+                    $class .= ucfirst($file_parts[$i]);
+                }
+                break;
+        }
+        return $class;
     }
 }

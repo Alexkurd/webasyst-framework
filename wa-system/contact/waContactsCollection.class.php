@@ -37,6 +37,15 @@ class waContactsCollection
      *
      * @param string $hash - search hash
      * @param array $options
+     *
+     *   - string $options['transform_phone_prefix'] - String, that say what transformation phone prefix rule(s) apply when search by phone prefix (search/phone*=<phone_prefix> OR search/phone@*=<phone_prefix>)
+     *       Variants of available values of string
+     *         - 'all_domains' - apply transformation prefix rules of all domains. Need for search contacts in backend
+     *         - 'current_domain' - apply transformation prefix rule of current domain. May come useful for frontend search
+     *         - other string, that supposed to be domain -  apply transformation prefix rule of concrete domain. May come useful for tests
+     *
+     *
+     *
      * @example
      *     All contacts where name contains John
      *     $collection = new waContactsCollection('/search/name*=John/');
@@ -175,9 +184,16 @@ class waContactsCollection
 
         // Add required fields to select and delete fields for getting data after query
         foreach ($fields as $i => $f) {
+
             if (!$contact_model->fieldExists($f)) {
-                if ($f == 'email') {
-                    $this->post_fields['email'][] = $f;
+                if ($f === 'email' || substr($f, 0, 6) === 'email.') {
+                    if ($f === 'email') {
+                        $this->post_fields['email'][] = $f; // OLD style behavior
+                    } elseif ($f === 'email.*') {
+                        $this->post_fields['email'][] = '*';
+                    } else {
+                        $this->post_fields['email'][] = substr($f, 6);
+                    }
                 } elseif ($f == '_online_status') {
                     $required_fields['last_datetime'] = 'c';
                     $required_fields['login'] = 'c';
@@ -199,6 +215,8 @@ class waContactsCollection
             if (isset($required_fields[$f])) {
                 $fields[$i] = ($required_fields[$f] ? $required_fields[$f]."." : '').$f;
                 unset($required_fields[$f]);
+            } elseif ($contact_model->fieldExists($f)) {
+                $fields[$i] = 'c.' . $f;
             }
         }
 
@@ -215,6 +233,29 @@ class waContactsCollection
     /**
      * Get data for contacts in this collection.
      * @param string|array $fields
+     *
+     * If need extract other columns of email row, NOT just email value use dot notation
+     * Like this
+     * email.status, email.email
+     *
+     * You can use even '*"
+     * Like this
+     * email.*
+     *
+     * @example
+     * $col->getContacts('*,email.email,email.status')
+     * OR
+     * $col->getContacts('*,email.*')
+     *
+     * If use OLD notation - without dot (.) collection extract only email values
+     * $col->getContacts('*')  (email values will be extracted - case we skip 'email' in fields list)
+     * $col->getContacts('*,email')  (email values will be extracted - same as we skipped 'email')
+     * $col->getContacts('*,email.email')  (email values will be extracted - same as previous )
+     *
+     * APPLICABLE only for email, cause we need save just 'email' notation for backward compatibility
+     *
+     * For other data fields we extract raw data from DB
+     *
      * @param int $offset
      * @param int $limit
      * @return array [contact_id][field] = field value in appropriate field format
@@ -334,7 +375,73 @@ class waContactsCollection
                     continue;
                 }
 
+
+                if ($table === 'email') {
+
+                    $model = $this->getModel('email');
+
+                    $columns = array();
+                    foreach ($fields as $field) {
+                        if ($field === '*') {
+                            $columns = array_keys($model->getMetadata());
+                            break;
+                        }
+                        if ($model->fieldExists($field)) {
+                            $columns[] = $field;
+                        }
+                    }
+
+                    // always present, cause it is important field
+                    $columns[] = 'email';
+
+                    $columns = array_unique($columns);
+
+                    $all_emails = $model->getByField('contact_id', $ids, true);
+
+                    // fill each contact by empty 'email'
+                    foreach ($data as $contact_id => &$contact) {
+                        $contact['email'] = array();
+                    }
+                    unset($contact);
+
+                    // merge into contacts info about emails AND take into account columns array
+                    foreach ($all_emails as $email_row) {
+                        if (isset($data[$email_row['contact_id']])) {
+                            if ($columns === array('email')) {
+                                // OLD style behavior case
+                                $data[$email_row['contact_id']]['email'][$email_row['sort']] = $email_row['email'];
+                            } else {
+                                $email_info = array();
+                                foreach ($columns as $column) {
+                                    if ($column != 'id' && $column != 'contact_id' && $column != 'sort') {
+                                        $email_info[$column] = $email_row[$column];
+                                    }
+                                }
+
+                                // just in case if some contact field formatter consume only 'value'
+                                // see for example
+                                $email_info['value'] = $email_info['email'];
+
+                                $data[$email_row['contact_id']]['email'][$email_row['sort']] = $email_info;
+                            }
+                        }
+                    }
+
+                    // array_values just in case
+                    foreach ($data as $contact_id => &$contact) {
+                        // ensure that emails for contact in order of sort field
+                        ksort($contact['email'], SORT_NUMERIC);
+                        // ensure 0 .. n indexing
+                        $contact['email'] = array_values($contact['email']);
+                    }
+                    unset($contact);
+
+                    continue;
+
+                }
+
                 $data_fields = $fields;
+
                 foreach ($data_fields as $k => $field_id) {
                     $f = waContactFields::get($field_id);
                     if ($f && $f instanceof waContactCompositeField) {
@@ -344,6 +451,7 @@ class waContactsCollection
                 }
 
                 $model = $this->getModel($table);
+
                 $post_data = $model->getData($ids, $data_fields);
                 foreach ($post_data as $contact_id => $contact_data) {
                     foreach ($contact_data as $field_id => $value) {
@@ -356,6 +464,7 @@ class waContactsCollection
                         }
                     }
                 }
+
                 if ($fields) {
                     $fill[$table] = array_fill_keys($fields, '');
                 } else if (!isset($fill[$table])) {
@@ -461,7 +570,9 @@ class waContactsCollection
             }
             //Return backslash and ampersand to query part
             $part = str_replace(array($escapedBS, $escapedAmp), array('\\', '&'), $part);
-            $parts = preg_split("/(\\\$=|\^=|\*=|==|!=|>=|<=|=|>|<|@=)/uis", $part, 2, PREG_SPLIT_DELIM_CAPTURE);
+
+            $pattern = self::getConditionOperations();
+            $parts = preg_split($pattern, $part, 2, PREG_SPLIT_DELIM_CAPTURE);
 
             if ($parts) {
                 if ($parts[0] === 'name' && $parts[1] === '*=') {
@@ -586,11 +697,99 @@ class waContactsCollection
                         $this->addWhere($whr);
 
                     } else {
-                        $on .= ' AND :table.value '.$this->getExpression($op, $term);
-                        if ($ext !== null) {
-                            $on .= " AND :table.ext = '".$model->escape($ext)."'";
+
+                        $is_transform_phone_prefix_search = false;
+                        if ($f === 'phone') {
+                            $is_op_applicable = in_array($op, array('=', '==', '@=', '^=', '@^=', '*=', '@*='));
+                            $is_transform_phone_prefix_search = !empty($this->options['transform_phone_prefix']) && $is_op_applicable;
                         }
-                        $this->addJoin('wa_contact_data', $on);
+
+                        // search by phone with taking into account prefix transformation
+                        if ($is_transform_phone_prefix_search) {
+
+                            // normalize '=' op, cause we don't have '@==' pair ("multiple" version)
+                            $op = $op === '=' || $op === '==' ? '=' : $op;
+
+                            $is_single_term_search = substr($op, 0, 1) !== '@';
+                            $is_equals_search = $op === '=' || $op === '@=';
+
+                            if ($is_single_term_search) {
+                                $input_terms = array($term);
+                                $multi_op = '@' . $op;          // "multiple" version of original op
+                            } else {
+                                $input_terms = explode(',', $term);
+                                $multi_op = $op;                // "multiple" version of original op is original op itself
+                            }
+
+                            // result list of terms that need to participate in search
+                            // indexed by search operation
+                            $result_terms = array();
+
+                            foreach ($input_terms as $phone_term) {
+
+                                $phone_term = trim($phone_term);
+
+                                // is international phone (or phone prefix) is passed
+                                $is_international = substr($phone_term, 0, 1) === '+';
+
+                                // original phone query search by multiple version of original search operation
+                                $result_terms[$multi_op][] = waContactPhoneField::cleanPhoneNumber($term);
+
+                                // for what domains apply transformations
+                                if ($this->options['transform_phone_prefix'] === 'all_domains') {
+                                    $domains = null;
+                                } elseif ($this->options['transform_phone_prefix'] == 'current_domain') {
+                                    $domains = wa()->getRouting()->getDomain(null, true, false);
+                                } else {
+                                    $domains = $this->options['transform_phone_prefix'];
+                                }
+
+                                $transform_results = waDomainAuthConfig::transformPhonePrefixForDomains($phone_term, $is_international, $domains);
+                                foreach ($transform_results as $transform_result) {
+                                    if ($transform_result['status']) {
+                                        if ($is_equals_search) {
+                                            // if search by "equal", transformed phone also must be search by "equal" op
+                                            $result_terms[$multi_op][] = $transform_result['phone'];
+                                        } else {
+                                            // otherwise search as prefix
+                                            $result_terms['@^='][] = $transform_result['phone'];
+                                        }
+                                    }
+                                }
+                            }
+
+                            $table_alias = $this->addJoin('wa_contact_data', $on);
+
+                            $where_conditions = array();
+
+                            foreach ($result_terms as $search_op => $search_terms) {
+                                // in $search_terms always at least one item, so no need to check for empty array
+                                $search_terms = array_unique($search_terms);
+                                $search_terms_str = join(',', $search_terms);
+                                $field_name = $table_alias . '.value';
+                                $where_condition = $this->getFullExpression($field_name, $search_op, $search_terms_str, false);
+                                $where_conditions[] = $where_condition;
+                            }
+
+                            $where_conditions_str = '(' . join(' OR ', $where_conditions) . ')';
+
+                            if ($ext !== null) {
+                                $where_conditions_str .= " AND {$table_alias}.ext = '".$model->escape($ext)."'";
+                            }
+
+                            $this->addWhere($where_conditions_str);
+
+                        } else {
+
+                            // just simple search by wa_contact_data.value
+
+
+                            $on .= ' AND ' . $this->getFullExpression(':table.value', $op, $term);
+                            if ($ext !== null) {
+                                $on .= " AND :table.ext = '" . $model->escape($ext) . "'";
+                            }
+                            $this->addJoin('wa_contact_data', $on);
+                        }
                     }
 
                 }
@@ -805,6 +1004,52 @@ class waContactsCollection
             default:
                 return " = '".$model->escape($value)."'";
         }
+    }
+
+    /**
+     * Returns expression for SQL with field name inside it
+     * Supports advanced operations: @^=, @$=, @*=
+     * @param string $field
+     * @param string $op
+     * @param string $value
+     * @param bool $wrap_in_parentheses
+     * @return mixed
+     */
+    protected function getFullExpression($field, $op, $value, $wrap_in_parentheses = true)
+    {
+        $model = $this->getModel();
+        switch ($op) {
+            case '@^=':
+                $condition = array();
+                foreach (explode(',', $value) as $v) {
+                    $condition[] = ":field LIKE '".$model->escape($v, 'like')."%'";
+                }
+                $expr = join(' OR ', $condition);
+                break;
+            case '@$=':
+                $condition = array();
+                foreach (explode(',', $value) as $v) {
+                    $condition[] = ":field LIKE '%".$model->escape($v, 'like')."'";
+                }
+                $expr = join(' OR ', $condition);
+                break;
+            case '@*=':
+                $condition = array();
+                foreach (explode(',', $value) as $v) {
+                    $condition[] = ":field LIKE '%".$model->escape($v, 'like')."%'";
+                }
+                $expr = join(' OR ', $condition);
+                break;
+            default:
+                $expr = ':field' . $this->getExpression($op, $value);
+                break;
+        }
+
+        $expr = str_replace(':field', $field, $expr);
+        if ($wrap_in_parentheses) {
+            $expr = '(' . $expr . ')';
+        }
+        return $expr;
     }
 
     public function getSQL($with_primary_email = false)
@@ -1082,7 +1327,7 @@ class waContactsCollection
     public function getHash($params_only = false)
     {
         if ($params_only) {
-            return $this->hash[1];
+            return (isset($this->hash[1]) ? $this->hash[1] : '');
         } else {
             return $this->hash;
         }
@@ -1106,5 +1351,21 @@ class waContactsCollection
     public function setUpdateCount($update_count)
     {
         $this->update_count = $update_count;
+    }
+
+    protected static function getConditionOperations($ret_type = 'regexp')
+    {
+        $operations = array(
+            '$=', '^=', '*=', '==', '!=', '>=', '<=', '=', '>', '<',
+            '@=', '@$=', '@^=', '@*='
+        );
+
+        if ($ret_type === 'regexp') {
+            $quote_symbols = array_map('preg_quote', $operations);
+            $pattern = '/(' . join('|', $quote_symbols) . ')/uis';
+            return $pattern;
+        } else {
+            return $operations;
+        }
     }
 }

@@ -17,19 +17,27 @@
     {/if}
 {/if}
 
+{$_is_order_page = $wa->globals("isOrderPage")}
+{if !empty($_is_order_page)}
+    {$html_class_array[] = "is-order-page"}
+{/if}
+
 {/strip}
 <html{if !empty($html_class_array)} class="{join(' ', $html_class_array)}"{/if}>
 
-<head>
+{$_head_prefix = $wa->globals("headPrefix")}
+
+<head {if !empty($_head_prefix)}prefix="{$_head_prefix}"{/if}>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1{if $wa->isMobile()}, maximum-scale=1, user-scalable=0{/if}" />
     <meta http-equiv="x-ua-compatible" content="IE=edge">
 
     <title>{$wa->title()|escape}</title>
-    <meta name="Keywords" content="{$wa->meta('keywords')|escape}" />
-    <meta name="Description" content="{$wa->meta('description')|escape}" />
+    <meta name="keywords" content="{$wa->meta('keywords')|escape}" />
+    <meta name="description" content="{$wa->meta('description')|escape}" />
 
     {if !empty($canonical)}<link rel="canonical" href="{$canonical}"/>{/if}
+    <link rel="icon" href="/favicon.ico"/>
     <link rel="shortcut icon" href="/favicon.ico"/>
     {if $wa->blog}
         <!-- rss -->
@@ -68,8 +76,8 @@
     <style>
         {if $theme_settings.color_text} html, body { color: {$theme_settings.color_text}; } {/if}
         {if $theme_settings.color_links} a { color: {$theme_settings.color_links}; } {/if}
-        {if $theme_settings.color_links_hover} a:hover { color: {$theme_settings.color_links_hover}; } {/if}
         {if $theme_settings.color_links_visited} a:visited { color: {$theme_settings.color_links_visited}; } {/if}
+        {if $theme_settings.color_links_hover} a:hover { color: {$theme_settings.color_links_hover}; } {/if}
         {if $theme_settings.color_hint}
             .hint,
             .breadcrumbs,
@@ -190,6 +198,28 @@
                                         [s`View cart`]
                                     </a>
                                 </div>
+
+                                {strip}
+                                {capture assign="_loading_template"}
+                                    <div class="s-loading-section">
+                                        <div class="s-loading-content">
+                                            <i class="icon16 loading"></i>
+                                        </div>
+                                    </div>
+                                {/capture}
+                                {/strip}
+
+                                <script>
+                                    ( function($) {
+                                        var is_loading = false;
+                                        $("#cart").on("click", function() {
+                                            if (!is_loading) {
+                                                is_loading = true;
+                                                $("body").append({$_loading_template|json_encode});
+                                            }
+                                        });
+                                    })(jQuery);
+                                </script>
                             {/if}
 
                             {if $wa->isAuthEnabled()}
@@ -300,9 +330,11 @@
                     </div>
                 {/if}
 
-                {if $wa->mailer && $wa->getUrl('mailer/frontend/subscribe')}
+                {if !empty($theme_settings.footer_subscribe_form_use) && $wa->mailer && $wa->getUrl('mailer/frontend/subscribe')}
                     <div class="footer-block mailer-subscribe">
-                        <a href="javascript:void(0);" class="top">[s`Follow us`]</a>
+                        {if !empty($theme_settings.footer_subscribe_form_title)}
+                            <a href="javascript:void(0);" class="top">{$theme_settings.footer_subscribe_form_title}</a>
+                        {/if}
 
                         <section class="s-subscribe-section" id="js-subscribe-section">
                             <form>
@@ -316,6 +348,10 @@
                             <p class="js-success-message" style="display:none">
                                 <i>[s`Thank you! We’ll keep you posted.`]</i>
                             </p>
+
+                            {if !empty($theme_settings.footer_subscribe_personal_data)}
+                                <div class="s-form-desc">{$theme_settings.footer_subscribe_personal_data}</div>
+                            {/if}
 
                             <script>
                                 ( function($) {
@@ -362,6 +398,5 @@
     {if $theme_settings.admin_sidebar}
         {if $wa->user()->isAdmin()}{include file="admin-sidebar.html" inline}{/if}
     {/if}
-
 </body>
 </html>

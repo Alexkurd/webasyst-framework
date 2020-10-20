@@ -2,6 +2,8 @@
 
 class webasystInstaller
 {
+    protected $db;
+
     public function installAll()
     {
         $this->createCliFile();
@@ -60,8 +62,9 @@ CLI;
     {
         $vcm = new waVerificationChannelModel();
         $channel = $vcm->getDefaultSystemEmailChannel();
-        $this->setVerificationChannelForDomainConfigs($channel['id']);
-        $this->setVerificationChannelForBackendConfig($channel['id']);
+        $channel_id = isset($channel['id']) ? $channel['id'] : null;
+        $this->setVerificationChannelForDomainConfigs($channel_id);
+        $this->setVerificationChannelForBackendConfig($channel_id);
     }
 
     protected function setVerificationChannelForDomainConfigs($channel_id)
@@ -148,27 +151,40 @@ CLI;
 
     public function createTable($table)
     {
-        $tables = array_map('strval', (array)$table);
-        if (empty($tables)) {
-            return;
-        }
-
-        $db_path = wa()->getAppPath('lib/config/db.php', 'webasyst');
-        $db = include($db_path);
-
-        $db_partial = array();
-        foreach ($tables as $table) {
-            if (isset($db[$table])) {
-                $db_partial[$table] = $db[$table];
-            }
-        }
-
-        if (empty($db_partial)) {
+        $db_tables = $this->getDbTables($table);
+        if (empty($db_tables)) {
             return;
         }
 
         $m = new waModel();
-        $m->createSchema($db_partial);
+        $m->createSchema($db_tables);
+    }
+
+    protected function getDbTables($table)
+    {
+        $tables = array_map('strval', (array)$table);
+        if (empty($tables)) {
+            return array();
+        }
+
+        // cache for only one instance
+        if ($this->db === null) {
+            $db_path = wa('webasyst')->getAppPath('lib/config/db.php', 'webasyst');
+            $this->db = include($db_path);
+        }
+
+        $db_partial = array();
+        foreach ($tables as $table) {
+            if (isset($this->db[$table])) {
+                $db_partial[$table] = $this->db[$table];
+            }
+        }
+
+        if (empty($db_partial)) {
+            return array();
+        }
+
+        return $db_partial;
     }
 
     public function tableExists($table)
@@ -181,5 +197,52 @@ CLI;
             $exists = false;
         }
         return $exists;
+    }
+
+    public function addColumn($table, $column_name, $column_definition, $after_column = null)
+    {
+        $disable_exception_log = waConfig::get('disable_exception_log');
+        waConfig::set('disable_exception_log', true);
+
+        $m = new waModel();
+
+        try {
+            $m->query("SELECT `{$column_name}` FROM `{$table}` WHERE 0");
+        } catch (waDbException $e) {
+            waConfig::set('disable_exception_log', false);
+
+            $sql = "ALTER TABLE `{$table}` ADD COLUMN `{$column_name}` {$column_definition}";
+            if ($after_column) {
+                $sql .= " AFTER {$after_column}";
+            }
+            $m->exec($sql);
+        }
+
+        waConfig::set('disable_exception_log', $disable_exception_log);
+    }
+
+    public function renameColumn($table, $old_column_name, $new_column_name, $column_definition)
+    {
+        $disable_exception_log = waConfig::get('disable_exception_log');
+        waConfig::set('disable_exception_log', true);
+
+        $m = new waModel();
+
+        try {
+            $m->query("SELECT `{$new_column_name}` FROM `{$table}` WHERE 0");
+        } catch (waDbException $e) {
+            waConfig::set('disable_exception_log', false);
+            $sql = "ALTER TABLE `{$table}` CHANGE `{$old_column_name}` `{$new_column_name}` {$column_definition}";
+            $m->exec($sql);
+        }
+
+        waConfig::set('disable_exception_log', $disable_exception_log);
+    }
+
+    public function changeColumn($table, $column_name, $column_definition)
+    {
+        $m = new waModel();
+        $sql = "ALTER TABLE `{$table}` CHANGE `{$column_name}` `{$column_name}` {$column_definition}";
+        $m->query($sql);
     }
 }

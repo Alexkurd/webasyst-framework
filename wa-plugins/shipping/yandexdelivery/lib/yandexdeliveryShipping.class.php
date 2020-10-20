@@ -3,22 +3,24 @@
 /**
  * @link https://yandex.ru/support/delivery/api.html
  * @link http://docs.yandexdelivery.apiary.io/
+ * @link https://tech.yandex.ru/delivery/doc/dg/about-docpage/
  * @link https://tech.yandex.ru/maps/jsapi/
  *
  *
- * @property-read string $client_id идентификатор аккаунта в сервисе
- * @property-read string $sender_id идентификаторы и URL магазинов из аккаунта в сервисе
- * @property-read string $warehouse_id
- * @property-read string[] $method_keys ключи для использования каждого ресурса openAPI
- * @property-read string[] $city город отправления
- * @property-read array[] $size настройки размеров
- * @property-read string $insurance
+ * @property-read string    $client_id    идентификатор аккаунта в сервисе
+ * @property-read string    $sender_id    идентификаторы и URL магазинов из аккаунта в сервисе
+ * @property-read string    $warehouse_id
+ * @property-read string[]  $method_keys  ключи для использования каждого ресурса openAPI
+ * @property-read string[]  $city         город отправления
+ * @property-read array[]   $size         настройки размеров
+ * @property-read string    $insurance
+ * @property-read boolean   $cash_service комиссия за перечисление денежных средств
  * @property-read boolean[] $integration
- * @property-read string $shipping_type
- * @property-read boolean $yd_warehouse
- * @property-read string $map
- * @property-read string $taxes
- * @property-read boolean $debug
+ * @property-read string    $shipping_type
+ * @property-read boolean   $yd_warehouse
+ * @property-read string    $map
+ * @property-read string    $taxes
+ * @property-read boolean   $debug
  */
 class yandexdeliveryShipping extends waShipping
 {
@@ -178,9 +180,22 @@ class yandexdeliveryShipping extends waShipping
         if ($service) {
             $intervals = ifset($service, 'custom_data', 'courier', 'intervals', array());
         } else {
+            $service_variant_id = ifset($shipping_params, '%service_variant_id', null);
+            if (($service_variant_id !== null) && ($key = $this->getCacheKey())) {
+                $cache = new waVarExportCache($key.'.data', 600, 'webasyst', true);
+                $data = $cache->get();
+                if (isset($data[$service_variant_id])) {
+                    $service = array(
+                        'custom_data' => $data[$service_variant_id],
+                    );
+                }
+            }
+
             $intervals = array(
                 null => array(0, 1, 2, 3, 4, 5, 6),
             );
+
+            $intervals = ifset($service, 'custom_data', 'courier', 'intervals', $intervals);
         }
 
         return array(
@@ -277,7 +292,7 @@ class yandexdeliveryShipping extends waShipping
     /**
      * Set package state into waShipping::STATE_DRAFT
      * @param waOrder $order
-     * @param array $shipping_data
+     * @param array   $shipping_data
      * @return null|string|string[] null, error or shipping data array
      */
     protected function draftPackage(waOrder $order, $shipping_data = array())
@@ -299,23 +314,34 @@ class yandexdeliveryShipping extends waShipping
         $shipping_discount = $this->correctItems();
 
         $data += array(
-            'order_requisite' => null,//number ID реквизитов магазина
-            'order_warehouse' => ($this->shipping_type == 'import') ? null : $this->warehouse_id,//number ID склада
-            'order_num'       => $order->id,//number Номер заказа магазина (не больше 15 цифр)
+            'order_requisite' => null,
+            //number ID реквизитов магазина
+            'order_warehouse' => ($this->shipping_type == 'import') ? null : $this->warehouse_id,
+            //number ID склада
+            'order_num'       => $order->id,
+            //number Номер заказа магазина (не больше 15 цифр)
 
-            'order_weight' => $weight,//Вес заказа, кг
+            'order_weight' => $weight,
+            //Вес заказа, кг
 
-            'order_length'            => $size['length'],      //number Длина заказа, см (округляется до целого в большую сторону)
-            'order_width'             => $size['width'],       //number Ширина заказа, см (округляется до целого в большую сторону)
-            'order_height'            => $size['height'],      //number Высота заказа, см (округляется до целого в большую сторону)
-            'order_assessed_value'    => $this->getAssessedPrice($this->insurance),//number Объявленная ценность, руб.
-            'order_delivery_cost' => number_format($order->shipping - $shipping_discount, 2, '.', ''),     //number Стоимость доставки, руб.
+            'order_length'            => $size['length'],
+            //number Длина заказа, см (округляется до целого в большую сторону)
+            'order_width'             => $size['width'],
+            //number Ширина заказа, см (округляется до целого в большую сторону)
+            'order_height'            => $size['height'],
+            //number Высота заказа, см (округляется до целого в большую сторону)
+            'order_assessed_value'    => $this->getAssessedPrice($this->insurance),
+            //number Объявленная ценность, руб.
+            'order_delivery_cost'     => number_format(round($order->shipping - $shipping_discount), 0, '.', ''),
+            //number Стоимость доставки, руб.
             'is_manual_delivery_cost' => empty($shipping_discount) ? 0 : 1,
 
-            'order_amount_prepaid' => $order->paid_datetime ? number_format($this->getPackageProperty('price'), 2, '.', '') : null,                 //number Сумма предоплаты по заказу, руб. (    300)
+            'order_amount_prepaid' => $order->paid_datetime ? number_format($order->total, 2, '.', '') : null,
+            //number Сумма предоплаты по заказу, руб. (    300)
             //'order_total_cost'           => $this->getPackageProperty('price'),
 
-            'order_shipment_date' => null,//$order->shipping_data['shipment_date'], //string 03 - 13 (string)-Дата отгрузки заказа 2017
+            'order_shipment_date' => null,
+            //$order->shipping_data['shipment_date'], //string 03 - 13 (string)-Дата отгрузки заказа 2017
             'order_shipment_type' => preg_replace('@\..+$@', '', $order->shipping_rate_id),
 
             'order_comment' => $order->comment,
@@ -381,11 +407,17 @@ class yandexdeliveryShipping extends waShipping
                 $template = 'Обновлен заказ в статусе %s <a href="https://delivery.yandex.ru/order/create?id=%d" target="_blank">№%s<i class="icon16 new-window"></i></a>';
             }
             $shipping_data = array(
-                'order_id'  => $response['order']['id'],
-                'status'    => $response['order']['status'],
-                'client_id' => $this->client_id,
-                'view_data' => sprintf($template, $response['order']['status_label'], $response['order']['id'], $response['order']['full_num']),
+                'order_id'        => $response['order']['id'],
+                'status'          => $response['order']['status'],
+                'client_id'       => $this->client_id,
+                'view_data'       => sprintf($template, $response['order']['status_label'], $response['order']['id'], $response['order']['full_num']),
+                'tracking_number' => $response['order']['id'],
             );
+
+            if (!empty($response['order']['fulfillment_parcel_id'])) {
+                $template = 'Идентификатор отгрузки в службе доставки: %s';
+                $shipping_data['view_data'] .= sprintf($template, $response['order']['fulfillment_parcel_id']);
+            }
 
             return $shipping_data;
         } catch (waException $ex) {
@@ -435,7 +467,7 @@ class yandexdeliveryShipping extends waShipping
     /**
      * Set package state into waShipping::STATE_CANCELED
      * @param waOrder $order
-     * @param array $shipping_data
+     * @param array   $shipping_data
      * @return null|string|string[] null, error or shipping data array
      */
     protected function cancelPackage(waOrder $order, $shipping_data = array())
@@ -473,7 +505,7 @@ class yandexdeliveryShipping extends waShipping
     /**
      * Set package state into waShipping::STATE_READY
      * @param waOrder $order
-     * @param array $shipping_data
+     * @param array   $shipping_data
      * @return null|string|string[] null, error or shipping data array
      */
     protected function readyPackage(waOrder $order, $shipping_data = array())
@@ -495,6 +527,10 @@ class yandexdeliveryShipping extends waShipping
             $response = $this->apiQuery('confirmSenderOrders', $data);
             if (isset($response['result']['error'][$order_id])) {
                 $message = 'Ошибка при автоматическом подтверждении отправления. Подтвердите отправление вручную в личном кабинете «Яндекс.Доставки».';
+                $hint_text = is_array($response['result']['error'][$order_id])
+                    ? implode(',', $response['result']['error'][$order_id]) : $response['result']['error'][$order_id];
+                $hint = htmlentities($hint_text, ENT_NOQUOTES, 'utf-8');
+                $message .= sprintf('<span class="hint">%s</span>', $hint);
 
                 return $message;
             } elseif (isset($response['result']['success'])) {
@@ -779,14 +815,101 @@ class yandexdeliveryShipping extends waShipping
                         $text = 'Отправление в стадии оформления.';
                         break;
                     case 'CREATED':
+                        //$text = 'заказ проверен и отправлен в службу доставки';
                         $text = 'Отправление оформлено.';
                         break;
                     case 'DELIVERY_LOADED':
-                        $text = 'Отправление подтвержденно службой доставки и ожидает отгрузки.';
+                        //$text = 'заказ подтвержден службой доставки';
+                        $text = 'Отправление подтверждено службой доставки и ожидает отгрузки.';
                         break;
                     case 'CANCELED':
                         $text = 'Заказ отменен.';
                         break;
+
+                    case 'SENDER_SENT':
+                        $text = 'Отправление ожидает подтверждения от службы доставки.';
+                        break;
+
+                    case 'SENDER_WAIT_FULFILMENT':
+                        $text = 'Отправление ожидается на едином складе.';
+                        break;
+
+                    case 'SENDER_WAIT_DELIVERY':
+                        $text = 'Отправление ожидается в службе доставки.';
+                        break;
+
+                    case 'FULFILMENT_LOADED':
+                        $text = 'Отправление подтверждено единым складом.';
+                        break;
+
+                    case 'FULFILMENT_ARRIVED':
+                        $text = 'Отправление находится на едином складе.';
+                        break;
+
+                    case 'FULFILMENT_PREPARED':
+                        $text = 'Отправление готово к передаче в службу доставки.';
+                        break;
+
+                    case 'FULFILMENT_TRANSMITTED':
+                        $text = 'Отправление передано в службу доставки.';
+                        break;
+
+                    case 'DELIVERY_AT_START':
+                        $text = 'Отправление находится на складе службы доставки.';
+                        break;
+
+                    case 'DELIVERY_TRANSPORTATION':
+                        $text = 'Отправление доставляется.';
+                        break;
+
+                    case 'DELIVERY_ARRIVED':
+                        $text = 'Заказ находится в населенном пункте получателя.';
+                        break;
+
+                    case 'DELIVERY_TRANSPORTATION_RECIPIENT':
+                        $text = 'Отправление доставляется по населенному пункту получателя.';
+                        break;
+
+                    case 'DELIVERY_ARRIVED_PICKUP_POINT':
+                        $text = 'Отправление находится в пункте самовывоза.';
+                        break;
+
+                    case 'DELIVERY_DELIVERED':
+                        $text = 'Отправление доставлено получателю.';
+                        break;
+
+                    case 'RETURN_PREPARING':
+                        $text = 'Отправление готовится к возврату.';
+                        break;
+
+                    case 'RETURN_ARRIVED_DELIVERY':
+                        $text = 'Отправление возвращено на склад службы доставки.';
+                        break;
+
+                    case 'RETURN_ARRIVED_FULFILMENT':
+                        $text = 'Отправление возвращено на единый склад.';
+                        break;
+
+                    case 'RETURN_PREPARING_SENDER':
+                        $text = 'Отправление возвращается в магазин.';
+                        break;
+
+                    case 'RETURN_RETURNED':
+                        $text = 'Отправление возвращено в магазин.';
+                        break;
+
+                    case 'LOST':
+                        $text = 'Отправление утеряно в процессе доставки.';
+                        break;
+
+                    case 'UNEXPECTED':
+                        $text = 'Статус отправления уточняется.';
+                        break;
+
+                    case 'ERROR':
+                        $text = 'Произошла ошибка.';
+                        break;
+
                     default:
                         $text = sprintf('Статус отправления: «%s».', $status);
                 }
@@ -837,6 +960,21 @@ class yandexdeliveryShipping extends waShipping
             $departure_datetime = $this->getPackageProperty('departure_datetime');
             if ($departure_datetime) {
                 $params['ship_date'] = date('Y-m-d', strtotime($departure_datetime));
+            }
+
+            $country_id = $this->getAddress('country');
+            $region_id = $this->getAddress('region');
+            if (!empty($country_id) && !empty($region_id)) {
+                $region_model = new waRegionModel();
+                $country_data = $region_model->getByCountry($country_id);
+                $region_data = $region_model->getByField([
+                    'country_iso3' => $country_id,
+                    'code' => $region_id,
+                ]);
+                $name_region = $region_data['name'];
+                if (!empty($name_region)) {
+                    $params['city_to'] .= ', ' . $name_region;
+                }
             }
 
             try {
@@ -895,14 +1033,21 @@ class yandexdeliveryShipping extends waShipping
             if (empty($services)) {
                 $rates = 'Доставка по указанному адресу недоступна.';
             } else {
-
-                uasort($services, array($this, 'sortServices'));
+                // Если API вернул службу доставки без точек самовывоза, то удаляем такую службу из массива
+                if (!is_object($services)) {
+                    foreach ($services as $key => $item) {
+                        if ($item['is_pickup_point'] && empty($item['pickupPoints'])) {
+                            unset($services[$key]);
+                        }
+                    }
+                }
 
                 $rates = $this->groupServices($services);
-
                 foreach ($services as $service) {
                     $rates += $this->formatRate($service);
                 }
+
+                uasort($rates, array($this, 'sortServices'));
 
                 $data = array();
                 if (!empty($rates)) {
@@ -958,6 +1103,11 @@ class yandexdeliveryShipping extends waShipping
         $data = array();
         $size = $this->size;
         switch ($size['type']) {
+            case 'passed':
+                if ($size = $this->getTotalSize()) {
+                    $data = $size;
+                }
+                break;
             case 'fixed':
                 $data += reset($size['table']);
                 break;
@@ -1025,6 +1175,14 @@ class yandexdeliveryShipping extends waShipping
             'currency'      => 'RUB',
         );
 
+        # recalc cost WithRules
+        $payment_types = $this->getSelectedPaymentTypes();
+        if (!empty($payment_types) && $this->cash_service) {
+            if ($rate['rate']) {
+                $rate['rate'] += $this->calculateServiceCost($service, compact('payment_types'));
+            }
+        }
+
         $rate['name'] = implode(': ', array_unique($rate['name']));
 
         $type = strtolower($service['type']);
@@ -1042,14 +1200,38 @@ class yandexdeliveryShipping extends waShipping
 
             case 'todoor': //Курьерская
                 $rate['type'] = self::TYPE_TODOOR;
-                $schedules = ifset($service['delivery']['courier']['schedules'], array());
+
                 $rate['custom_data']['courier'] = array(
                     'intervals' => array(),
                     'offset'    => intval($service['minDays']),
+                    'payment'   => array(),
                 );
+
+                $payment = &$rate['custom_data']['courier']['payment'];
+                if (!empty($service['cashService'])) {//$service['settings']['cash_service_in_cost']
+                    $payment[self::PAYMENT_TYPE_CARD] = "Оплата картой";
+                    $payment[self::PAYMENT_TYPE_CASH] = "Оплата наличными";
+                    $payment[self::PAYMENT_TYPE_PREPAID] = "Предоплата";
+                } else {
+                    if (!empty($service['services'])) {
+                        foreach ($service['services'] as $_service) {
+                            if ($_service['code'] === 'CASH_SERVICE') {
+                                if (!empty($_service['possibility'])) {
+                                    $payment[self::PAYMENT_TYPE_CARD] = "Оплата картой";
+                                    $payment[self::PAYMENT_TYPE_CASH] = "Оплата наличными";
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    $payment[self::PAYMENT_TYPE_PREPAID] = "Предоплата";
+                }
+                unset($payment);
 
                 $intervals = &$rate['custom_data']['courier']['intervals'];
 
+                $schedules = ifset($service['delivery']['courier']['schedules'], array());
                 foreach ($schedules as $schedule) {
                     $schedule['from'] = preg_replace('@\:00$@', '', $schedule['from']);
                     $schedule['from'] = preg_replace('@^(\d:)@', '0$1', $schedule['from']);
@@ -1075,6 +1257,8 @@ class yandexdeliveryShipping extends waShipping
                 $date_format = waDateTime::getFormat('date');
                 $offset = sprintf('+ %d days', $rate['custom_data']['courier']['offset']);
                 $rate['custom_data']['courier']['placeholder'] = waDateTime::format($date_format, $offset);
+
+                $rate['custom_data'][waShipping::TYPE_TODOOR] = &$rate['custom_data']['courier'];
                 break;
 
             case 'pickup': //В пункт самовывоза
@@ -1246,11 +1430,11 @@ HTML;
         $sort = max(-1, min(1, ifset($sort[strtolower($a['type'])]) - ifset($sort[strtolower($b['type'])])));
 
         if ($sort == 0) {
-            $sort = strcmp($a['delivery']['name'], $b['delivery']['name']);
+            $sort = strcasecmp(ifset($a['name'], ''), ifset($b['name'], ''));
         }
 
         if ($sort == 0) {
-            $sort = strcmp($a['tariffName'], $b['tariffName']);
+            $sort = max(-1, min(1, ceil($a['rate'] - $b['rate'])));
         }
 
         return $sort;
@@ -1307,12 +1491,22 @@ HTML;
 
         $radio_params = $params;
         $radio_params['value'] = ifset($params['value']['type']);
-        $radio_params['options'] = array(
-            array(
-                'value'       => 'fixed',
-                'title'       => 'Фиксированное значение',
-                'description' => '',
-            ),
+        $radio_params['options'] = array();
+        if (isset($params['instance'])) {
+            /** @var yandexdeliveryShipping $instance */
+            $instance = $params['instance'];
+            if ($instance->getAdapter()->getAppProperties('dimensions')) {
+                $radio_params['options'][] = array(
+                    'value'       => 'passed',
+                    'title'       => 'Рассчитанные дополнительным плагином',
+                    'description' => '',
+                );
+            }
+        }
+        $radio_params['options'][] = array(
+            'value'       => 'fixed',
+            'title'       => 'Фиксированное значение',
+            'description' => '',
         );
         $html .= waHtmlControl::getControl(waHtmlControl::RADIOGROUP, 'type', $radio_params);
 
@@ -1444,14 +1638,19 @@ HTML;
                 var scope = container.find('.js-weight');
                 switch (this.value) {
                     case 'fixed':
+                        container.show();
                         if (rows.length > 1) {
                             rows.filter(':not(:first)').hide();
                         }
                         scope.hide();
                         break;
                     case 'table':
+                        container.show();
                         scope.show();
                         rows.show();
+                        break;
+                    default:
+                        container.hide();
                         break;
 
                 }
@@ -1789,7 +1988,7 @@ HTML;
             }
 
         } catch (waException $ex) {
-            $this->handleApiException(empty($net) ? null : $net, $ex);
+            $this->handleApiException(empty($net) ? null : $net, $ex, $data);
             throw $ex;
         }
 
@@ -1797,9 +1996,9 @@ HTML;
     }
 
     /**
-     * @param waNet $net
+     * @param waNet                   $net
      * @param waNet|waException|array $result
-     * @param waiCache $cache
+     * @param waiCache                $cache
      * @return $this|mixed|null
      */
     public function handleApiQuery($net, $result, $cache = null)
@@ -1811,6 +2010,11 @@ HTML;
         } else {
             $response = $result;
             try {
+                if ($this->debug) {
+                    $debug = var_export(compact('url', 'data', 'response'), true);
+                    waLog::log($debug, 'wa-plugins/shipping/yandexdelivery/api.debug.log');
+                }
+
                 if ($response['status'] != 'ok') {
                     $this->api_error = $response['data'];
                     throw new waException($response['error']);
@@ -1818,15 +2022,9 @@ HTML;
                     $cache->set($response['data']);
                 }
 
-                if ($this->debug) {
-                    $debug = var_export(compact('url', 'data', 'response'), true);
-                    waLog::log($debug, 'wa-plugins/shipping/yandexdelivery/api.debug.log');
-                }
-
                 if (empty($this->api_callback)) {
                     return $response['data'];
                 } else {
-                    $callback = $this->api_callback['callback'];
                     if (empty($cache) && isset($this->api_callback['cache'])) {
                         $cache = $this->api_callback['cache'];
                     }
@@ -1835,7 +2033,7 @@ HTML;
                         $cache->set($response['data']);
                     }
 
-                    return call_user_func_array($callback, array($net, $response['data'], $cache));
+                    return call_user_func_array($this->api_callback['callback'], array($net, $response['data'], $cache));
                 }
 
             } catch (waException $ex) {
@@ -1845,12 +2043,13 @@ HTML;
     }
 
     /**
-     * @param waNet $net
+     * @param waNet       $net
      * @param waException $ex
+     * @param null        $data
      * @return null
      * @throws waException
      */
-    private function handleApiException($net, $ex)
+    private function handleApiException($net, $ex, $data = null)
     {
         $message = $ex->getMessage();
         if ($net) {
@@ -1859,6 +2058,10 @@ HTML;
                 $response = $net->getResponse(true);
             }
             $message .= "\n".var_export(compact('response'), true);
+        }
+
+        if ($data) {
+            $message .= "\n".var_export(compact('data'), true);
         }
 
         waLog::log($message, 'wa-plugins/shipping/yandexdelivery/api.error.log');
@@ -1871,6 +2074,29 @@ HTML;
         }
 
         return null;
+    }
+
+    private function calculateServiceCost($service, $options)
+    {
+        $cost = 0;
+        foreach ($service['services'] as $_service) {
+            if ($_service['code'] === 'CASH_SERVICE') {
+                if (!empty($_service['possibility'])) {
+                    $payment_types = array(
+                        waShipping::PAYMENT_TYPE_CASH,
+                        waShipping::PAYMENT_TYPE_CARD,
+                    );
+
+                    $required = array_intersect($payment_types, (array)$options['payment_types']);
+                    if ($required && empty($_service['optional'])) {
+                        $cost += floatval($_service['cost']);
+                    } elseif (!$required && !empty($_service['optional'])) {
+                        $cost -= floatval($_service['cost']);
+                    }
+                }
+            }
+        }
+        return $cost;
     }
 
     private function getAssessedPrice($string)
@@ -1913,17 +2139,19 @@ HTML;
             ),
             array(
                 'value'       => self::STATE_READY,
-                'title'       => 'Создавать отгрузки',
+                'title'       => 'Создавать отгрузки (кроме доставки курьером)',
                 'description' => '<br>После окончательного формирования заказа в приложении (например, после выполнения действия «Отправлен» в Shop-Script) черновик в кабинете «Яндекс.Доставки» превращается в сформированный заказ, ожидающий отгрузку.<br>
-Заявками на отгрузку и печатью ярлыков управляйте в кабинете «Яндекс.Доставки». Например, в одной заявке можно объединить несколько заказов.<br>',
+Заявками на отгрузку и печатью ярлыков управляйте в кабинете «Яндекс.Доставки». Например, в одной заявке можно объединить несколько заказов.<br>
+<strong>Не используется, если покупатель выбрал доставку курьером</strong>.<br>',
                 'disabled'    => !$this->getAdapter()->getAppProperties(self::STATE_READY),
             ),
             array(
                 'value'       => self::STATE_CANCELED,
-                'title'       => 'Отменять отгрузки',
+                'title'       => 'Отменять отгрузки (кроме доставки курьером)',
                 'description' => '<br>Когда вы отменяете заказ в приложении (например, с помощью действия «Удалить» в Shop-Script), отменяется заказ в кабинете «Яндекс.Доставки»:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;- заказ, ожидавший отгрузку, переносится в список «Отмены» в кабинете «Яндекс.Доставки»;<br>
-&nbsp;&nbsp;&nbsp;&nbsp;- черновик не удаляется и остается без изменений, его можно вручную отредактировать или отправить в архив.',
+&nbsp;&nbsp;&nbsp;&nbsp;- черновик не удаляется и остается без изменений, его можно вручную отредактировать или отправить в архив.<br>
+<strong>Не используется, если покупатель выбрал доставку курьером</strong>.',
                 'disabled'    => !$this->getAdapter()->getAppProperties(self::STATE_CANCELED),
             ),
         );

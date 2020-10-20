@@ -47,9 +47,6 @@ class sitePersonalSettingsAction extends waViewAction
             'auth_types'                 => $auth_config->getAuthTypes(),
             'signup_captcha'             => $auth_config->getSignUpCaptcha(),
             'rememberme'                 => $auth_config->getRememberMe(),
-            'login_caption'              => $auth_config->getLoginCaption(),
-            'login_placeholder'          => $auth_config->getLoginPlaceholder(),
-            'login_captcha'              => $auth_config->getLoginCaptcha(),
             'login_captcha_variants'     => $auth_config->getLoginCaptchaVariants(),
             'demo_captcha'               => wa()->getCaptcha(),
             'available_fields'           => $auth_config->getAvailableFields(),
@@ -62,7 +59,6 @@ class sitePersonalSettingsAction extends waViewAction
             'domain'                     => waIdna::dec($domain),
             'domain_id'                  => siteHelper::getDomainId(),
             'personal_sidebar'           => $personal_sidebar,
-            'phone_available'            => webasystHelper::smsTemplateAvailable(),
         ));
     }
 }

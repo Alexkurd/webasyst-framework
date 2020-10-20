@@ -1,24 +1,24 @@
 <?php
 
 /**
- * @property-read string $merchant_login
- * @property-read string $merchant_pass1
- * @property-read string $merchant_pass2
- * @property-read string $merchant_test_pass1
- * @property-read string $merchant_test_pass2
- * @property-read string $hash
- * @property-read string $locale
- * @property-read string $testmode
- * @property-read string $gateway_currency
- * @property-read string $merchant_currency
- * @property-read int $lifetime
+ * @property-read string  $merchant_login
+ * @property-read string  $merchant_pass1
+ * @property-read string  $merchant_pass2
+ * @property-read string  $merchant_test_pass1
+ * @property-read string  $merchant_test_pass2
+ * @property-read string  $hash
+ * @property-read string  $locale
+ * @property-read string  $testmode
+ * @property-read string  $gateway_currency
+ * @property-read string  $merchant_currency
+ * @property-read int     $lifetime
  * @property-read boolean $commission
  * @property-read boolean $receipt
- * @property-read string $sno
- * @property-read string $payment_object_type_product
- * @property-read string $payment_object_type_service
- * @property-read string $payment_object_type_shipping
- * @property-read string $payment_method_type
+ * @property-read string  $sno
+ * @property-read string  $payment_object_type_product
+ * @property-read string  $payment_object_type_service
+ * @property-read string  $payment_object_type_shipping
+ * @property-read string  $payment_method_type
  *
  * @link https://docs.robokassa.ru/ru/
  * @link https://docs.robokassa.ru/#6865
@@ -129,8 +129,8 @@ class robokassaPayment extends waPayment implements waIPayment
     protected function callbackInit($request)
     {
         if (!empty($request['InvId']) && intval($request['InvId'])) {
-            $this->app_id = ifempty($request['shp_wa_app_id']);
-            $this->merchant_id = ifempty($request['shp_wa_merchant_id']);
+            $this->app_id = ifempty($request['shp_wa_app_id'], ifset($request['app_id']));
+            $this->merchant_id = ifempty($request['shp_wa_merchant_id'], '*');
             $this->request_testmode = ifempty($request['shp_wa_testmode']);
             $this->order_id = intval($request['InvId']);
         } elseif (!empty($request['app_id'])) {
@@ -168,9 +168,10 @@ class robokassaPayment extends waPayment implements waIPayment
                 $url = $this->getAdapter()->getBackUrl(waAppPayment::URL_SUCCESS, $transaction_data);
                 break;
             case 'failure':
-                if ($this->order_id && $this->app_id) {
-                    $app_payment_method = self::CALLBACK_CANCEL;
-                    $transaction_data['state'] = self::STATE_CANCELED;
+                if ($this->order_id && $this->app_id && $this->merchant_id) {
+                    $app_payment_method = self::CALLBACK_NOTIFY;
+                    $transaction_data['type'] = self::OPERATION_CHECK;
+                    $transaction_data['view_data'] = 'Неуспешная попытка оплаты заказа';
                 }
                 $url = $this->getAdapter()->getBackUrl(waAppPayment::URL_FAIL, $transaction_data);
                 break;
@@ -277,7 +278,7 @@ HTML;
     private function getCommission($amount)
     {
         if (!$this->gateway_currency) {
-            throw new waPaymentException('Для рассчета коммиссии необходимо выбрать способ оплаты');
+            throw new waPaymentException('Для расчета комиссии нужно выбрать способ оплаты.');
         }
         $params = array(
             'MerchantLogin' => $this->merchant_login,
@@ -288,13 +289,13 @@ HTML;
         if ($rate = (double)$xml->OutSum) {
             return $rate;
         }
-        throw new waPaymentException(sprintf('Не удалось рассчитать комиссию для %s', $this->gateway_currency));
+        throw new waPaymentException(sprintf('Не удалось рассчитать комиссию для %s.', $this->gateway_currency));
     }
 
     private function getRates($amount)
     {
         if (!$this->gateway_currency) {
-            throw new waPaymentException('Для рассчета коммиссии необходимо выбрать способ оплаты');
+            throw new waPaymentException('Для расчета комиссии нужно выбрать способ оплаты.');
         }
         $params = array(
             'MerchantLogin' => $this->merchant_login,
@@ -317,7 +318,7 @@ HTML;
             $rate = reset($rates);
             return (double)$rate['IncSum'];
         }
-        throw new waPaymentException(sprintf('Не удалось рассчитать комиссию для %s', $this->gateway_currency));
+        throw new waPaymentException(sprintf('Не удалось рассчитать комиссию для %s.', $this->gateway_currency));
     }
 
     private static function getCurrencyOptions($data = array())
@@ -356,7 +357,7 @@ HTML;
     }
 
     /**
-     * @param string $service
+     * @param string   $service
      * @param string[] $params
      * @return SimpleXMLElement
      * @throws waException
@@ -369,7 +370,7 @@ HTML;
         );
 
         if (!class_exists('waNet')) {
-            throw new waPaymentException('Требуется актуальная версия фреймворка Webasyst');
+            throw new waPaymentException('Требуется актуальная версия фреймворка Webasyst.');
         }
 
         if (empty($params['MerchantLogin'])) {
@@ -521,7 +522,7 @@ HTML;
             }
 
             if (!$tax_included && $rate > 0) {
-                throw new waPaymentException('Фискализация товаров с налогом не включенном в стоимость не поддерживается. Обратитесь к администратору магазина');
+                throw new waPaymentException('Фискализация товаров с налогом, не включенным в стоимость, не поддерживается. Обратитесь к администратору магазина.');
             }
 
             switch ($rate) {

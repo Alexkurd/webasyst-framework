@@ -69,7 +69,11 @@ class waContactPhoneField extends waContactStringField
     public function getHtmlOne($params = array(), $attrs = '')
     {
         if (isset($params['value'])) {
-            $params['value'] = $this->format($params['value'], 'value');
+            if (is_array($params['value']) && isset($params['value']['value'])) {
+                $params['value']['value'] = $this->format($params['value']['value'], 'value');
+            } else {
+                $params['value'] = $this->format($params['value'], 'value');
+            }
         }
         return parent::getHtmlOne($params, $attrs);
     }
@@ -281,6 +285,8 @@ class waContactPhoneJsFormatter extends waContactPhoneFormatter
     {
         if (is_array($data)) {
             $data['value'] = parent::format($data);
+            unset($data['status']);
+
             // No htmlspecialchars, because isn't needed here
             // This formatted data means to be used in js code,
             // make escape there by yourself

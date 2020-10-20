@@ -18,6 +18,7 @@ class waEvent
      * @param string $app_id
      * @param string $name Event name
      * @param array $options
+     * @throws waException
      */
     public function __construct($app_id, $name, $options = array())
     {
@@ -42,6 +43,7 @@ class waEvent
      *
      * @param mixed &$params
      * @return array
+     * @throws waException
      */
     public function run(&$params = null)
     {
@@ -135,6 +137,7 @@ class waEvent
      * @param mixed $params
      * @param array $handler
      * @return array
+     * @throws waException
      */
     protected function runApps(&$params, $handler)
     {
@@ -191,6 +194,7 @@ class waEvent
      * @param mixed $params
      * @param array $handler
      * @return array
+     * @throws waException
      */
     protected function runPlugins(&$params, $handler)
     {
@@ -273,6 +277,7 @@ class waEvent
      * @var CONST WA_EVENT_CLEAR_CACHE This is a constant that will always reset the memory cache.
      *
      * @return void
+     * @throws waException
      */
     protected function setStaticData()
     {
@@ -311,6 +316,7 @@ class waEvent
      * Get handlers from apps and plugins and set to cache memory
      *
      * @return void
+     * @throws waException
      */
     protected function setHandlers()
     {
@@ -318,7 +324,7 @@ class waEvent
 
         //Get app handlers
         try {
-            $apps = wa()->getApps();
+            $apps = wa()->getApps(true);
         } catch (Exception $e) {
             $this->debugLog($e->getMessage());
             $apps = array();
@@ -338,6 +344,7 @@ class waEvent
      * Set in memory cache data about plugins
      *
      * @return void
+     * @throws waException
      */
     protected function setPlugins()
     {
@@ -368,6 +375,7 @@ class waEvent
      *
      * @param array $handler
      * @return null
+     * @throws waException
      */
     public static function addCustomHandler($handler)
     {
@@ -415,6 +423,7 @@ class waEvent
      *
      * @param string $app_id
      * @return void
+     * @throws waException
      */
     protected function parseAppsHandlersFiles($app_id)
     {
@@ -455,6 +464,7 @@ class waEvent
      *
      * @param string $parse_app_id
      * @return void
+     * @throws waException
      */
     protected function parseAppsWildCard($parse_app_id)
     {
@@ -502,6 +512,7 @@ class waEvent
      * Extracting handlers from plugin settings
      *
      * @return void
+     * @throws waException
      */
     protected function parsePluginsHandlers()
     {
@@ -586,14 +597,12 @@ class waEvent
      *
      * @param string $app_id
      * @return array
+     * @throws waException
      */
     protected function getAppsHandlersFiles($app_id)
     {
-        $apps_path = wa()->getConfig()->getPath('apps');
-        $DS = DIRECTORY_SEPARATOR;
-        $files = waFiles::listdir($apps_path.$DS.$app_id.$DS.'lib'.$DS.'handlers'.$DS);
-
-        return $files;
+        $handlers_path = wa()->getAppPath('lib/handlers', $app_id);
+        return waFiles::listdir($handlers_path);
     }
 
     /**
@@ -602,6 +611,7 @@ class waEvent
      * @param string $app_id
      * @param string $file_name
      * @return bool|mixed
+     * @throws waException
      */
     protected function includeAppsHandlerFile($app_id, $file_name)
     {
@@ -622,6 +632,7 @@ class waEvent
      * @param $plugin_id
      * @param string $app_id
      * @return void
+     * @throws waException
      */
     protected function includePluginLocale($plugin_id, $app_id)
     {
@@ -637,6 +648,7 @@ class waEvent
      *
      * @param string $app_id
      * @return array|bool
+     * @throws waException
      */
     protected function getAppsWildCard($app_id)
     {
@@ -657,6 +669,7 @@ class waEvent
      * Return plugins from memory cache
      *
      * @return array
+     * @throws waException
      */
     protected function getPlugins()
     {
@@ -671,6 +684,7 @@ class waEvent
      * @param string $app_id
      * @param string $plugin_id
      * @return mixed|null
+     * @throws waException
      */
     protected function getPluginInfo($app_id, $plugin_id)
     {
@@ -695,7 +709,7 @@ class waEvent
         if (substr($event, -2, 2) === '.*') {
             //Escape last dot and other previous regex symbol. After add a regular expression .*
             $regex = '/'.preg_quote(substr($event, 0, -1)).'.*/';
-        } elseif ($event{0} !== '/' && $event{0} !== '~') {
+        } elseif ($event[0] !== '/' && $event[0] !== '~') {
             $regex = '/'.preg_quote($event).'/';
         } else {
             $regex = $event;
@@ -714,7 +728,7 @@ class waEvent
      */
     protected function isMask($event)
     {
-        if ($event && (substr($event, -2, 2) === '.*' || $event{0} === '/' || $event{0} === '~')) {
+        if ($event && (substr($event, -2, 2) === '.*' || $event[0] === '/' || $event[0] === '~')) {
             return true;
         } else {
             return false;
@@ -770,6 +784,7 @@ class waEvent
     /**
      * @param $handler
      * @param $start_execution
+     * @throws waException
      */
     protected function addExecutionTime($handler, $start_execution)
     {

@@ -1,4 +1,5 @@
 $(function () {
+
     $(window).resize(function() {
         var list_width = $('#wa-applist ul').width() - 1,
             icon_width = 75, // 72px + space symbol
@@ -113,6 +114,58 @@ $(function () {
     });
 */
 
+    // Webasyst ID auth announcement :: click on auth link
+
+    // Bind contact with Webasyst ID contact
+    var bindWithWebasystID = function(href, oauth_modal) {
+        if (!oauth_modal) {
+            var referrer_url = window.location.href;
+            window.location = href + '&referrer_url=' + referrer_url;
+            return;
+        }
+        var width = 600;
+        var height = 500;
+        var left = (screen.width - width) / 2;
+        var top = (screen.height - height) / 2;
+        window.open(href,'oauth', "width=" + 600 + ",height=" + height + ",left="+left+",top="+top+",status=no,toolbar=no,menubar=no");
+    };
+
+    $('.js-webasyst-id-connect-announcement .js-webasyst-id-connect').on('click', function (e) {
+        e.preventDefault();
+        var in_webasyst_settings_page = location.href.indexOf(webasyst_id_settings_url) !== -1;
+        if (!in_webasyst_settings_page) {
+            location.href = webasyst_id_settings_url;
+        }
+    });
+
+    $('.js-webasyst-id-auth-announcement .js-webasyst-id-auth').on('click', function (e) {
+        e.preventDefault();
+        bindWithWebasystID($(this).attr('href'));
+    });
+
+    var showWebasystIDHelp = function() {
+        var help_url = backend_url + "?module=backend&action=webasystIDHelp",
+            is_now_in_settings_page = (location.pathname || '').indexOf('webasyst/settings/waid/') !== -1;
+
+        if (is_now_in_settings_page) {
+            help_url += '&caller=webasystSettings'
+        }
+
+        $.get(help_url, function (html) {
+            $('body').append(html);
+        });
+    };
+
+    $('.js-webasyst-id-connect-announcement .js-webasyst-id-helplink').on('click', function (e) {
+        e.preventDefault();
+        showWebasystIDHelp();
+    });
+
+    $('.js-webasyst-id-auth-announcement .js-webasyst-id-helplink').on('click', function (e) {
+        e.preventDefault();
+        showWebasystIDHelp();
+    });
+
     var pixelRatio = !!window.devicePixelRatio ? window.devicePixelRatio : 1;
     $(window).on("load", function() {
         if (pixelRatio > 1) {
@@ -142,26 +195,54 @@ $(function () {
         return false;
     });
 
-    $('#wa').on('click', 'a.wa-announcement-close', function () {
-        var app_id = $(this).attr('rel');
-        if ($(this).closest('.d-notification-block').length) {
-            $(this).closest('.d-notification-block').remove();
+    $('#wa').on('click', 'a.wa-announcement-close', function (e) {
+        e.preventDefault();
+
+        var $link = $(this),
+            name = $link.data('name') || 'announcement_close',
+            app_id = $link.attr('rel');
+
+        if ($link.closest('.d-notification-block').length) {
+            $link.closest('.d-notification-block').remove();
             if (!$('.d-notification-wrapper').children().length) {
                 $('.d-notification-wrapper').hide();
             }
         } else {
-            $(this).next('p').remove();
-            $(this).remove();
+            $link.next('p').remove();
+            $link.remove();
         }
+
         var url = backend_url + "?module=settings&action=save";
-        $.post(url, {app_id: app_id, name: 'announcement_close', value: 'now()'});
+        $.post(url, {app_id: app_id, name: name, value: 'now()'});
+
         return false;
     });
 
-    var updateCount = function () {
+    var is_idle = true;
+
+    $(document).on("mousemove keyup scroll", function() {
+        is_idle = false;
+    });
+
+    document.addEventListener("touchmove", function () {
+        is_idle = false;
+    }, false);
+
+    var updateCount = function() {
+
+        var data = {
+            background_process: 1
+        };
+
+        if (is_idle) {
+            data.idle = "true";
+        } else {
+            is_idle = true;
+        }
+
         $.ajax({
             url: backend_url + "?action=count",
-            data: {'background_process': 1},
+            data: data,
             success: function (response) {
                 if (response && response.status == 'ok') {
                     // announcements

@@ -22,6 +22,9 @@ class waRequest
     const TYPE_ARRAY_INT = 'array_int';
     const TYPE_ARRAY = 'array';
 
+    // overriden in unit tests
+    protected static $env_vars = array();
+
     protected static $params = array();
 
     /**
@@ -388,27 +391,37 @@ class waRequest
         //
 
         // IP that directly contacted the server (may turn out to be a proxy)
-        $ip = getenv('REMOTE_ADDR');
+        $ip = self::getEnv('REMOTE_ADDR');
         if ($ip === '::1') { // ipv6 localhost
             $ip = '127.0.0.1';
         }
 
         // Check if $ip can be a proxy
-        $is_trusted_proxy = true;
+        $is_trusted_proxy = false;
         $trusted_proxies = SystemConfig::systemOption('trusted_proxies');
+        if (empty($trusted_proxies)) {
+            $trusted_proxies = array('127.0.0.0/24');
+        }
         if (is_array($trusted_proxies)) {
-            $trusted_proxies[] = '127.0.0.1';
-            $is_trusted_proxy = in_array($ip, $trusted_proxies);
+            foreach ($trusted_proxies as $trusted_proxy) {
+                if (self::inRange($ip, $trusted_proxy)) {
+                    $is_trusted_proxy = true;
+                    break;
+                }
+            }
         }
 
         // get client's IP from headers if allowed
         if ($is_trusted_proxy) {
-            if (getenv('HTTP_X_FORWARDED_FOR')) {
+            if (self::getEnv('HTTP_X_FORWARDED_FOR')) {
                 // Contains a chain of proxy addresses, the last IP goes directly to the customer to contact the proxy server.
-                $ip = array_filter(array_map('trim', explode(',', getenv('HTTP_X_FORWARDED_FOR'))));
-                $ip = (string) end($ip);
-            } elseif (getenv('HTTP_CLIENT_IP')) {
-                $ip = getenv('HTTP_CLIENT_IP');
+                $ip2 = array_filter(array_map('trim', explode(',', self::getEnv('HTTP_X_FORWARDED_FOR'))));
+                $ip2 = (string) reset($ip2);
+                if ($ip2) {
+                    $ip = $ip2;
+                }
+            } elseif (self::getEnv('HTTP_CLIENT_IP')) {
+                $ip = self::getEnv('HTTP_CLIENT_IP');
             }
         }
 
@@ -421,6 +434,38 @@ class waRequest
         }
 
         return $ip;
+    }
+
+    protected static function getEnv($varname = null)
+    {
+        return isset(self::$env_vars[$varname]) ? self::$env_vars[$varname] : getenv($varname);
+    }
+
+    /**
+     * @example:
+     *    10.5.21.30 in 10.5.16.0/20 == true
+     *    192.168.50.2 in 192.168.30.0/23 == false
+     * @param string $ip
+     * @param string $range
+     * @return bool
+     */
+    private static function inRange($ip, $range) {
+        if (strpos($range, '/') == false) {
+            return $ip == $range;
+        }
+
+        list($range, $net_mask) = explode('/', $range);
+
+        $ip_decimal = ip2long($ip);
+        $range_decimal = ip2long($range);
+
+        $wildcard_decimal = (1 << (32 - $net_mask));
+        $net_mask_decimal = ~($wildcard_decimal - 1);
+
+        if (($ip_decimal & $net_mask_decimal) == $range_decimal) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -502,23 +547,20 @@ class waRequest
      * Returns id of design theme used in current frontend page.
      *
      * @return string
+     * @throws waException
      */
     public static function getTheme()
     {
-        $app_id = wa()->getConfig()->getApplication();
-        $key = wa()->getRouting()->getDomain().'/theme';
-        if (($theme_hash = self::get('theme_hash')) && ($theme = self::get('set_force_theme')) !== null) {
-            $app_settings_model = new waAppSettingsModel();
-            $hash = $app_settings_model->get($app_id, 'theme_hash');
-            $global_hash = $app_settings_model->get('webasyst', 'theme_hash');
+        $key = self::getThemeStorageKey();
+        $theme_hash = self::get('theme_hash');
+        $theme = self::get('set_force_theme');
+
+        $session_theme = wa()->getStorage()->get($key);
+
+        if ($theme_hash !== null && $theme !== null) {
+            $asm = new waAppSettingsModel();
+            $hash = $asm->get('webasyst', 'theme_hash');
             if ($theme_hash == md5($hash)) {
-                if ($theme && waTheme::exists($theme)) {
-                    wa()->getStorage()->set($app_id.'/'.$key, $theme);
-                    return $theme;
-                } else {
-                    wa()->getStorage()->del($app_id.'/'.$key);
-                }
-            } elseif ($global_hash && $theme_hash == md5($global_hash)) {
                 if ($theme && waTheme::exists($theme)) {
                     wa()->getStorage()->set($key, $theme);
                     return $theme;
@@ -526,16 +568,34 @@ class waRequest
                     wa()->getStorage()->del($key);
                 }
             } else {
-                wa()->getStorage()->del($app_id.'/'.$key);
                 wa()->getStorage()->del($key);
             }
-        } elseif ((($theme = wa()->getStorage()->get($app_id.'/'.$key)) || ($theme = wa()->getStorage()->get($key))) && waTheme::exists($theme)) {
+        } elseif ($session_theme && waTheme::exists($session_theme)) {
+            $session_theme_type = (new waTheme($session_theme))->type;
+            if ($session_theme_type !== waTheme::TRIAL || $session_theme_type === waTheme::TRIAL && wa()->getUser()->get('is_user') == 1) {
+                return $session_theme;
+            }
+        }
+
+        $theme = self::param('theme', 'default');
+        if (self::isMobile()) {
+            $theme = self::param('theme_mobile', 'default');
+        }
+
+        if (waTheme::exists($theme) && (new waTheme($theme))->type !== waTheme::TRIAL) {
             return $theme;
         }
-        if (self::isMobile()) {
-            return self::param('theme_mobile', 'default');
-        }
-        return self::param('theme', 'default');
+
+        return 'default';
+    }
+
+    /**
+     * @return string
+     * @throws waException
+     */
+    public static function getThemeStorageKey()
+    {
+        return wa()->getRouting()->getDomain().'/theme';
     }
 
     public static function isHttps()
@@ -561,6 +621,10 @@ class waRequest
             return true;
         }
         if (!empty($_SERVER['HTTP_X_SCHEME']) && strtolower($_SERVER['HTTP_X_SCHEME']) == 'https') {
+            return true;
+        }
+        $http_cf_visitor = json_decode(self::server('HTTP_CF_VISITOR'), true);
+        if (!empty($http_cf_visitor['scheme']) && $http_cf_visitor['scheme'] == 'https') {
             return true;
         }
         return false;

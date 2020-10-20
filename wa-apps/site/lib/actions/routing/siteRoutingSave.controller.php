@@ -78,9 +78,12 @@ class siteRoutingSaveController extends waJsonController
 
             // Save new route
             $params = array(
-                'domain' => $domain,
-                'route'  => &$route,
+                'domain'   => $domain,
+                'route'    => &$route,
+                'route_id' => $route_id,
+                'is_new'   => true
             );
+
             wa('site')->event('route_save.before', $params);
             $routes[$domain][$route_id] = $route;
             waUtils::varExportToFile($routes, $path);
@@ -164,8 +167,10 @@ class siteRoutingSaveController extends waJsonController
             }
 
             $params = array(
-                'domain' => $domain,
-                'route'  => &$new,
+                'domain'   => $domain,
+                'route'    => &$new,
+                'route_id' => $route_id,
+                'is_new'   => false
             );
 
             wa('site')->event('route_save.before', $params);
@@ -299,6 +304,21 @@ class siteRoutingSaveController extends waJsonController
 
         if (empty($r['locale'])) {
             unset($r['locale']);
+        }
+
+        if (!empty($r['app'])) {
+            if (!empty($r['theme'])) {
+                $theme = new waTheme($r['app'].':'.$r['theme']);
+                if ($theme['type'] == waTheme::TRIAL) {
+                    $r['theme'] = 'default';
+                }
+            }
+            if (!empty($r['theme_mobile'])) {
+                $theme_mobile = new waTheme($r['app'].':'.$r['theme_mobile']);
+                if ($theme_mobile['type'] == waTheme::TRIAL) {
+                    $r['theme_mobile'] = 'default';
+                }
+            }
         }
 
         return $r;

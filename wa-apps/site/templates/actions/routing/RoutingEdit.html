@@ -29,7 +29,7 @@
                 <div class="s-route-block" id="s-route-where">
                     <span class="gray">
                         {$domain_decoded}/
-                    </span><input type="text" name="params[url]" value="{if strlen($route_id)}{$route.url|escape}{/if}" class="bold large" placeholder="*" />
+                    </span><input type="text" name="params[url]" value="{$route.url|escape}" class="js-url bold large" />
                 </div>
 
                 {if empty($route.redirect) && !isset($route.static_content) && !$app}
@@ -46,7 +46,7 @@
                 <div class="s-route-block" id="s-route-where">
                     <span class="gray">
                         {$domain_decoded}/
-                    </span><input type="text" name="params[url]" value="{if strlen($route_id)}{$route.url|escape}{/if}" class="bold large" placeholder="*" />
+                    </span><input type="text" name="params[url]" value="*" class="js-url bold large" />
                 </div>
 
                 {if empty($route.redirect)}
@@ -75,6 +75,20 @@
         <div class="block padded s-redirect-details" style="{if empty($route.redirect)}display: none;{/if}">
             {* FIELDS FOR REDIRECT *}
             <div class="field-group">
+                <div class="field">
+                    <div class="name">[`Temporary redirecting`]</div>
+                    <div class="value">
+                        <label>
+                            <input type="checkbox" name="params[code]" value="302"{if !empty($route.code) && $route.code == 302} checked{/if} />
+                            [`Use server response code 302`]
+                        </label>
+                    </div>
+                    <div class="value">
+                        <div class="hint">[`Enable for <strong>temproray</strong> redirecting only, which you are planning to cancel in the future.`]</div>
+                        <div class="hint">[`Disable for <strong>permanent</strong> redirecting with server response code 301, which is used to inform search engines that the new URL should be indexed instead of the old one.`]</div>
+                    </div>
+                </div>
+
                 <div id="s-route-comment" class="field" style="{if empty($route.redirect)}display: none;{/if}">
                     <div class="name">[`Comment`]</div>
                     <div class="value">
@@ -210,9 +224,11 @@
                             <div class="value">
                                 <select name="params[static_content_type]">
                                     <option value=""{if empty($route.static_content_type)} selected{/if}>[`file`]</option>
-                                    <option value="text/plain" {if !empty($route.static_content_type) && ($route.static_content_type === 'text/plain')} selected{/if}>text/plain</option>
-                                    <option value="text/html" {if !empty($route.static_content_type) && ($route.static_content_type === 'text/html')} selected{/if}>text/html</option>
+                                    <option value="text/plain" {if !empty($route.static_content_type) && ($route.static_content_type === 'text/plain')} selected{/if}>[`text (text/plain)`]</option>
+                                    <option value="text/html" {if !empty($route.static_content_type) && ($route.static_content_type === 'text/html')} selected{/if}>[`HTML code (text/html)`]</option>
                                 </select>
+                                <br>
+                                <span class="hint">[`If content type “file” is selected, downloading of a file will start automatically if there is no extension in its name.`]</span>
                             </div>
                         </div>
                         <div class="field">
@@ -282,6 +298,20 @@
 $(function () {
 
     var $disabled_toggle = $("#js-ibutton-disabled");
+    var is_new_route = {if strlen($route_id)}false{else}true{/if};
+
+    function updateRoutingErrors(routing_errors)
+    {
+        // Page could be loaded by other apps, so $.wa.site not loaded, but updateRoutingErrors is not very important method, so we just skip call
+        if ($.wa.site) {
+            $.wa.site.updateRoutingErrors(routing_errors);
+        } else if (routing_errors) {
+            console.log(routing_errors);
+        }
+    }
+
+    // Rule address contains unsupported character, regexp for define it
+    var invalid_url_regexp = /(\&|\$|\+|\,|\:|\;|\=|\?|\@|\#|\<|\>|\[|\]|\}|\||\^|\%)/;
 
     {if isset($route.redirect)}
         $disabled_toggle.iButton({
@@ -298,6 +328,22 @@ $(function () {
             }
         });
     {/if}
+
+    function checkUrlInput() {
+        var $form = $("#s-settings-form"),
+            $url_input = $form.find('.js-url'),
+            url = $url_input.val(),
+            res = url.match(invalid_url_regexp),
+            is_valid = !res;
+        if (url.length && !is_valid) {
+            $url_input.attr('disabled', true);
+            $url_input.append($('<input type="hidden" name="params[url]">').val(url));
+        }
+    }
+
+    if (!is_new_route) {
+        checkUrlInput();
+    }
 
     function checkSSLProtocol() {
         //Disabled ssl checkbox
@@ -392,7 +438,7 @@ $(function () {
                     $("#s-rules").removeClass('s-routing-minimized');
                     $("#s-rules .s-domain-url").show();
 
-                    $.wa.site.updateRoutingErrors(response.data.routing_errors);
+                    updateRoutingErrors(response.data.routing_errors);
 
                 } else {
                     alert(response.errors);
@@ -403,8 +449,10 @@ $(function () {
         return false;
     });
 
-    $("#s-settings-form").submit(function () {
-        var f = $(this);
+    $("#s-settings-form").on('submit', function () {
+        var $form = $(this),
+            $url_input = $form.find('.js-url').last();
+
         $("#s-settings-form-status").html('<i style="vertical-align:middle" class="icon16 loading"></i> [`Saving...`]').fadeIn("slow");
         var callback = function (response) {
             if (response.status === 'ok') {
@@ -448,13 +496,40 @@ $(function () {
                     });
             } else if (response.status === 'fail') {
                 $("#s-settings-form-status").html('<span class="small" style="color: #f00;">' + response.errors + '</span>');
-                f.find('input.button:submit').removeClass('green').addClass('red');
+                $form.find('input.button:submit').removeClass('green').addClass('red');
             }
         };
-        $.post(f.attr('action'), f.serialize(), function (response) {
+
+        // Validating unsupported characters in url
+        if (!$url_input.attr('disabled') && $url_input.length) {
+            var url = $url_input.val(),
+                res = url.match(invalid_url_regexp);
+
+            if (res) {
+
+                $("#s-settings-form-status").html('');
+
+                var title = '[`Rule cannot be saved`]',
+                    content = '[`Rule address contains unsupported character <strong class="highlighted">%s</strong>.`]';
+
+                content = content.replace(/\%s/, res[0]);
+
+                $().waDialog({
+                    'title': title,
+                    'content': '<p>'+ content +'</p>',
+                    'height': '140px',
+                    'width': '400px',
+                    'buttons': '<a class="button red cancel">[s`Close`]</a>'
+                });
+
+                return false;
+            }
+        }
+
+        $.post($form.attr('action'), $form.serialize(), function (response) {
             if (response.status === 'ok' && response.data.confirm) {
                 if (confirm(response.data.confirm)) {
-                    $.post(f.attr('action') + '&replace=' + response.data.replace, f.serialize(), callback, 'json')
+                    $.post($form.attr('action') + '&replace=' + response.data.replace, $form.serialize(), callback, 'json')
                 } else {
                     $("#s-settings-form-status").empty();
                 }
@@ -462,7 +537,7 @@ $(function () {
                 callback(response);
             }
 
-            $.wa.site.updateRoutingErrors(response.data.routing_errors);
+            updateRoutingErrors(response.data.routing_errors);
 
         }, "json");
         return false;

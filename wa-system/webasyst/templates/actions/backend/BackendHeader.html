@@ -8,59 +8,88 @@
     {/strip}
 {/function}
 {* Header item *}
+{strip}
 {function name="_renderHeaderItem" _id="" _info=[]}
-    {strip}
-        {* Build item url *}
-            {* pseudo-app *}
-            {if !empty($_info.app_id) && !empty($_info.link)}
-                {$_item_url = "`$backend_url``$_info.app_id`/`$_info.link`/"}
-            {* real app *}
-            {else}
-                {$_item_url = "`$backend_url``$_id`/"}
-            {/if}
-        {* Version *}
-        {if !empty($_info.version)}
-            {$_version = "?v=`$_info.version|escape`"}
+    {* Build item url *}
+        {* pseudo-app *}
+        {if !empty($_info.app_id) && !empty($_info.link)}
+            {$_item_url = "`$backend_url``$_info.app_id`/`$_info.link`/"}
+        {* real app *}
         {else}
-            {$_version = null}
+            {$_item_url = "`$backend_url``$_id`/"}
         {/if}
+    {* Version *}
+    {if !empty($_info.version)}
+        {$_version = "?v=`$_info.version|escape`"}
+    {else}
+        {$_version = null}
+    {/if}
 
-        <li id="wa-app-{str_replace('.', '-', $_id)}" data-app="{$_id}" {if $_id == $current_app || stristr($reuqest_uri, $_item_url) !== false} class="selected"{/if}>
-            {* Build app icon count *}
-            {$_count = null}
-            {if $counts && isset($counts[$_id])}
-                {if is_array($counts[$_id])}
-                    {$_item_url = $counts[$_id]['url']}
-                    {$_count = $counts[$_id]['count']}
-                {else}
-                    {$_count = $counts[$_id]}
-                {/if}
+    <li id="wa-app-{str_replace('.', '-', $_id)}" data-app="{$_id}" {if $_id == $current_app || stristr($reuqest_uri, $_item_url) !== false} class="selected"{/if}>
+        {* Build app icon count *}
+        {$_count = null}
+        {if $counts && isset($counts[$_id])}
+            {if is_array($counts[$_id])}
+                {$_item_url = $counts[$_id]['url']}
+                {$_count = $counts[$_id]['count']}
+            {else}
+                {$_count = $counts[$_id]}
             {/if}
-            <a href="{$_item_url}">
-                {if isset($_info.img)}
-                    <img{if !empty($_info.icon.96)} data-src2="{$root_url}{$_info.icon.96}{$_version}"{/if} src="{$root_url}{$_info.img}{$_version}" alt="">
-                {/if}
-                {$_info.name|ifempty}
-                {if $_count}
-                    <span class="indicator">{$_count}</span>
-                {/if}
-            </a>
-        </li>
-    {/strip}
+        {/if}
+        <a href="{$_item_url}">
+            {if isset($_info.img)}
+                <img{if !empty($_info.icon.96)} data-src2="{$root_url}{$_info.icon.96}{$_version}"{/if} src="{$root_url}{$_info.img}{$_version}" alt="">
+            {/if}
+            {$_info.name|ifempty}
+            {if $_count}
+                <span class="indicator">{$_count}</span>
+            {/if}
+        </a>
+    </li>
 {/function}
+{/strip}
 {strip}
 {* @event backend_header *}
 {* $return[%app_id%]['header_top'] *}
 {if !empty($header_top)}{foreach $header_top as $_}{$_}{/foreach}{/if}
-<script type="text/javascript">var backend_url = "{$backend_url}";</script>
-{* Announcements *}
-{if !empty($announcements)}
-    <div id="wa-announcement">
-        {foreach $announcements as $_app_id => $_texts}
-            {_renderAnnouncement _app_id=$_app_id _texts=$_texts}
-        {/foreach}
-    </div>
+<script type="text/javascript">
+    var backend_url = "{$backend_url}";
+    var webasyst_id_settings_url = {$webasyst_id_settings_url|json_encode};
+</script>
+{if !empty($include_wa_push)}
+    <script src="{$wa_url}wa-content/js/jquery-wa/wa.push.js"></script>
 {/if}
+
+{* Announcements section *}
+<div id="wa-announcement">
+
+    {if $show_connection_banner}
+        <div class="js-webasyst-id-announcement js-webasyst-id-auth-announcement js-webasyst-id-connect-announcement w-webasyst-id-banner">
+            <a href="javascript:void(0);" class="wa-announcement-close js-close-webasyst-id-announcement" title="close"  data-name="webasyst_id_announcement_close" rel="webasyst">&times;</a>
+            <p>
+                <i class="icon16 waid-green"></i>[s`<strong>Enable sign-in with Webasyst ID</strong>, a universal authorization option that unites Webasyst Customer Center and backend sign-in on your custom domains. Webasyst ID allows you to use all Webasyst apps, sites, and services, and to avoid the use of different passwords on various domains.`]&nbsp;
+                <a href="javascript:void(0)"
+                   class="bold js-webasyst-id-auth js-webasyst-id-connect">{sprintf('[s`Enable&nbsp;Webasyst&nbsp;ID on %s — it’s free and secure!`]', $current_domain|escape|strtoupper)}</a>&nbsp;
+                <a href="javascript:void(0);" class="gray js-webasyst-id-helplink">[s`How does it work?`]</a>
+            </p>
+        </div>
+    {elseif $webasyst_id_auth_banner}
+        <div class="js-webasyst-id-announcement js-webasyst-id-auth-announcement js-webasyst-id-auth-announcement w-webasyst-id-banner">
+            <a href="javascript:void(0);" class="wa-announcement-close js-close-webasyst-id-announcement" title="close"  data-name="webasyst_id_announcement_close" rel="webasyst">&times;</a>
+            <p>
+                <i class="icon16 userpic20" style="background-image: url('{$user->getPhoto(32)}');"></i>+ <i class="icon16 waid-green"></i> {sprintf('[s`<strong>Upgrade your user account (%s) to Webasyst ID</strong>, a unified authorization across all Webasyst apps, sites, and services. It’s free, secure, and takes just a minute.`]', $user.login|escape|strtoupper)}&nbsp;
+                <a href="{$webasyst_id_auth_banner.url}"
+                    class="bold js-webasyst-id-auth">{sprintf('[s`Enable&nbsp;Webasyst&nbsp;ID for %s now!`]', $user.login|escape|strtoupper)}</a>&nbsp;
+                <a href="javascript:void(0);" class="gray js-webasyst-id-helplink">[s`How does it work?`]</a>
+            </p>
+        </div>
+    {/if}
+
+    {foreach $announcements as $_app_id => $_texts}
+        {_renderAnnouncement _app_id=$_app_id _texts=$_texts}
+    {/foreach}
+</div>
+
 <div id="wa-header">
     {* Account name *}
     <div id="wa-account">
@@ -101,6 +130,7 @@
 
     {* App list *}
     <div id="wa-applist"{if is_array($counts)} class="counts-cached"{/if}>
+        {strip}
         <ul>
             {foreach $header_items as $_id => $_info}
                 {_renderHeaderItem _id=$_id _info=$_info}
@@ -109,6 +139,8 @@
                 <a href="#" id="wa-moreapps"></a>
             </li>
         </ul>
+        {/strip}
+
         {if $reuqest_uri == $backend_url || $reuqest_uri == "`$backend_url`/"}
             <div class="d-dashboard-header-content">
                 <div class="d-dashboards-list-wrapper" id="d-dashboards-list-wrapper"></div>

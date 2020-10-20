@@ -12,7 +12,7 @@ class webasystSettingsFieldSaveController extends webasystSettingsJsonController
         if (strlen($id) > 0) {
             $field = $constructor->getField($id);
             if (!$field) {
-                $this->notFound();
+                throw new waException(_w('Page not found'), 404);
             }
         }
 
@@ -75,11 +75,14 @@ class webasystSettingsFieldSaveController extends webasystSettingsJsonController
     }
 
     /**
+     * @throws waException
      * @var waContactField $subfield
      */
     public function setOptions($options)
     {
         $all_fields = waContactFields::getAll('all');
+
+        $field_constructor = new webasystFieldConstructor();
 
         $cfvm = new waContactFieldValuesModel();
 
@@ -88,6 +91,9 @@ class webasystSettingsFieldSaveController extends webasystSettingsJsonController
             $field = waContactFields::get($field_id);
 
             $old_fields = array();
+            /**
+             * @var waContactField $subfield
+             */
             foreach($field->getParameter('fields') as $subfield) {
                 $old_fields[$subfield->getId()] = $subfield;
             }
@@ -98,24 +104,52 @@ class webasystSettingsFieldSaveController extends webasystSettingsJsonController
                 if ($subfield_id == '%FID%') {
                     continue;
                 }
-                // Removing empty subfield options (radio/select inputs)
+
+                // for radio/select kind of field
                 if (isset($params['options'])) {
-                    $params['options'] = array_diff($params['options'], array(''));
+
+                    $old_options = array();
+                    if (!empty($old_fields[$subfield_id])) {
+                        $subfield = $old_fields[$subfield_id];
+                        $old_options = $subfield->getParameter('options');
+                        $old_options = is_array($old_options) ? $old_options : array();
+                    }
+
+                    // Collect options (radio/select inputs) by this rules:
+                    // + as key so as value must not be empty
+                    // + key must be preserved in case of options resorted or new key added or another key deleted
+                    // + use value for new key
+                    $params_options = array();
+                    foreach ($params['options'] as $key => $value) {
+                        $key = trim($key);
+                        $value = trim($value);
+                        if (strlen($key) > 0 && strlen($value) > 0) {
+                            if (!isset($old_options[$key])) {   // is new key
+                                $key = $value;
+                            }
+                            $params_options[$key] = $value;
+                        }
+                    }
+                    $params['options'] = $params_options;
                 }
 
+
                 if (!empty($old_fields[$subfield_id])) {
+
+                    $subfield = $old_fields[$subfield_id];
+
                     // update
                     foreach ($params as $param_key => $param_value) {
-                        $subfield = $old_fields[$subfield_id];
                         $subfield->setParameter($param_key, $param_value);
                         $new_fields[$subfield_id] = $subfield;
                     }
 
                     // delete
-                    if (!empty($params['_deleted']) && $params['_deleted'] == 1) {
+                    if (!empty($params['_deleted']) && $params['_deleted'] == 1 && $field_constructor->canDeleteSubfield($field_id, $subfield_id)) {
                         unset($old_fields[$subfield_id]); // from old array
                         unset($new_fields[$subfield_id]); // from new array
                     }
+
                 } else {
                     // create
                     $new_subfield = $this->createFromOpts($params, $all_fields);
@@ -183,6 +217,7 @@ class webasystSettingsFieldSaveController extends webasystSettingsJsonController
      * @param array $opts
      * @param array $occupied_keys
      * @return null|waContactField
+     * @throws waException
      */
     public static function createFromOpts($opts, $occupied_keys = array())
     {
@@ -232,6 +267,7 @@ class webasystSettingsFieldSaveController extends webasystSettingsJsonController
      * @param string $str Specified string
      * @param boolean $strict Whether a default value must be generated if provided string results in an empty URL
      * @return string
+     * @throws waException
      */
     public static function transliterate($str, $strict = true)
     {

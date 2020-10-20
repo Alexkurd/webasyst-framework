@@ -319,9 +319,9 @@ var WaLoginAbstractForm = ( function($) {
             }
 
             var messages_blocks = [];
-            $.each(messages || [], function (index, msg) {
+            $.each(messages || [], function (code, msg) {
                 var $msg = that.formatInfoMessage(msg, false, name);
-                $msg.data('index', index).attr('data-index', index);
+                $msg.data('code', code).attr('data-code', code);
                 messages_blocks.push($msg);
             });
 
@@ -355,7 +355,7 @@ var WaLoginAbstractForm = ( function($) {
         that.triggerEvent('wa_auth_form_change_view');
     };
 
-    Self.prototype.getErrorTemplate = function (name) {
+    Self.prototype.getErrorTemplate = function (error_namespace, error, error_code) {
         return this.$templates.error_msg;
     };
 
@@ -367,20 +367,20 @@ var WaLoginAbstractForm = ( function($) {
         return error;
     };
 
-    Self.prototype.prepareErrorText = function (name, error) {
+    Self.prototype.prepareErrorText = function (error_namespace, error, error_code) {
         return this.escape(error);
     };
 
-    Self.prototype.prepareErrorItem = function (name, error, index) {
+    Self.prototype.prepareErrorItem = function (error_namespace, error, error_code) {
         var that = this,
-            $error_msg = that.getErrorTemplate(name).clone(),
+            $error_msg = that.getErrorTemplate(error_namespace, error, error_code).clone(),
             $error = $error_msg.clone();
             $error
-                .data('name', name)
-                .data('index', index)
-                .attr('data-name', name)
-                .attr('data-index', index);
-        $error.html(that.prepareErrorText(name, error));
+                .data('name', error_namespace)
+                .data('code', error_code)
+                .attr('data-name', error_namespace)
+                .attr('data-code', error_code);
+        $error.html(that.prepareErrorText(error_namespace, error, error_code));
         return $error;
     };
 
@@ -412,6 +412,26 @@ var WaLoginAbstractForm = ( function($) {
         var that = this,
             $wrapper = that.$wrapper;
         return $wrapper.find('.' + that.classes.field + '[data-field-id="' + id +'"]');
+    };
+
+    Self.prototype.getInfoMessageItem = function(name, code) {
+        var that = this,
+            $wrapper = that.$wrapper,
+            $messages = $wrapper.find('.' + that.classes.message_msg + '[data-name="' + name + '"]');
+        if (code !== undefined) {
+            return $messages.filter('[data-code="'+ code +'"]');
+        }
+        return $messages;
+    };
+
+    Self.prototype.getErrorItem = function(error_namespace, error_code) {
+        var that = this,
+            $wrapper = that.$wrapper,
+            $errors = $wrapper.find('.' + that.classes.error_msg + '[data-name="' + error_namespace + '"]');
+        if (error_code !== undefined) {
+            return $errors.filter('[data-code="'+ error_code +'"]');
+        }
+        return $errors;
     };
 
     Self.prototype.showUncaughtErrors = function (name, error_items, reset) {
@@ -509,10 +529,6 @@ var WaLoginAbstractForm = ( function($) {
         var that = this,
             $form = that.getFormItem();
 
-        $form.on('change', ':input', function () {
-            that.clearErrors();
-        });
-
         var contexts = {},
             captcha_input_name = that.buildFormInputName('captcha'),
             text_input_selector = ':text:not([name=' + captcha_input_name + ']),:password';
@@ -545,6 +561,18 @@ var WaLoginAbstractForm = ( function($) {
                 context.val = val;
             }, 300);
         });
+
+        $form.on('change', ':input', function () {
+            var $input = $(this),
+                name = $input.attr('name'),
+                context = contexts[name] || {},
+                prev_val = $.trim(context.val || ''),
+                val = $.trim($input.val() || '');
+            if (val !== prev_val) {
+                that.clearErrors();
+            }
+            context.val = val;
+        });
     };
 
     Self.prototype.onDoneSubmitHandlers = function () {
@@ -555,7 +583,12 @@ var WaLoginAbstractForm = ( function($) {
                 return true;
             },
             redirect: function (url) {
-                window.location.href = url;
+                url = url || '';
+                if (url.indexOf('#') !== -1 && url === window.location.href) {
+                    window.location.reload();
+                } else {
+                    window.location.href = url;
+                }
                 return true;
             },
             messages: function (messages) {
@@ -718,19 +751,30 @@ var WaLoginAbstractForm = ( function($) {
         });
     };
 
-    Self.prototype.beforeErrorTimerStart = function () {
+    Self.prototype.beforeErrorTimerStart = function (message, timeout, options) {
         // Override it
     };
 
-    Self.prototype.afterErrorTimerStart = function () {
+    Self.prototype.afterErrorTimerFinish = function (message, timeout, options) {
         // Override it
     };
 
-    Self.prototype.prepareTimeoutErrorItem = function (message, timeout) {
+    /**
+     * Prepare animated timeout error DOM item
+     * @param {String} message message with substitute mask, see runTimeoutMessage
+     * @param {Number} timeout in seconds
+     * @param {Object} options
+     * @param {String} [options.error_namespace]
+     * @param {String|Number} [options.error_code]
+     * @returns {*}
+     */
+    Self.prototype.prepareTimeoutErrorItem = function (message, timeout, options) {
         var that = this,
             $error = that.prepareErrorItem('timeout', message);
 
-        that.beforeErrorTimerStart();
+        options = options || {};
+
+        that.beforeErrorTimerStart(message, timeout, options);
 
         // not need auto clearing on blur on input change
         $error.data('notClear', 1).attr('data-not-clear', 1);
@@ -740,29 +784,34 @@ var WaLoginAbstractForm = ( function($) {
             timeout: timeout,
             onFinish: function () {
                 $error.remove();
-                that.afterErrorTimerStart();
+                that.afterErrorTimerFinish(message, timeout, options);
             }
         });
 
         return $error;
     };
 
-    Self.prototype.prepareErrorItems = function (name, errors) {
+    Self.prototype.prepareErrorItems = function (error_namespace, errors) {
         var that = this,
             items = [];
 
-        if (name === 'timeout') {
+        if (error_namespace === 'timeout') {
             var message = errors.message,
                 timeout = errors.timeout;
-            var $error = that.prepareTimeoutErrorItem(message, timeout);
+            var $error = that.prepareTimeoutErrorItem(message, timeout, {
+                error_namespace: error_namespace
+            });
             items = [$error];
         } else {
-            $.each(errors || [], function (index, error) {
+            $.each(errors || [], function (error_code, error) {
                 var $error;
-                if (index === 'timeout') {
-                    $error = that.prepareTimeoutErrorItem(error.message, error.timeout);
+                if (error_code === 'timeout') {
+                    $error = that.prepareTimeoutErrorItem(error.message, error.timeout, {
+                        error_namespace: error_namespace,
+                        error_code: error_code
+                    });
                 } else {
-                    $error = that.prepareErrorItem(name, error, index);
+                    $error = that.prepareErrorItem(error_namespace, error, error_code);
                 }
                 items.push($error);
             });
@@ -782,7 +831,7 @@ var WaLoginAbstractForm = ( function($) {
     Self.prototype.runTimeoutMessage = function ($message, options) {
         var that = this,
             ticks = options.timeout,
-            msg = $message.html(),
+            msg = $.trim($message.html()),
             onFinish = options.onFinish;
 
         ticks = parseInt(ticks, 10);

@@ -64,12 +64,12 @@ class webasystFieldConstructor
     }
 
     /**
-     * @throws waException
      * @param waContactField|null $field
      * @param array|null $data
      * @return array of two items
      *          0 - null|waContactField
      *          1 - array of errors
+     * @throws waException
      */
     public function updateField($field, $data = array())
     {
@@ -162,6 +162,7 @@ class webasystFieldConstructor
      * @return array of two items
      *          0 - null|waContactField
      *          1 - array of errors
+     * @throws waException
      */
     protected function getUpdatedField($field = null, $data = array())
     {
@@ -312,8 +313,27 @@ class webasystFieldConstructor
     }
 
     /**
+     * Can delete this field or subfield
+     * @param string $field_id
+     * @param string $subfield_id
+     * @return bool|mixed
+     */
+    public function canDeleteSubfield($field_id, $subfield_id)
+    {
+        if (!is_scalar($field_id) || !is_scalar($subfield_id)) {
+            return false;
+        }
+        $parent_field_info = $this->getFieldInfo($field_id);
+        $original_sub_field_ids = ifset($parent_field_info, 'original_sub_field_ids', array());
+        $original_sub_field_ids = is_array($original_sub_field_ids) ? $original_sub_field_ids : array();
+        return !in_array($subfield_id, $original_sub_field_ids, true);
+    }
+
+    /**
+     * Is field system
      * @param string|waContactField $field
      * @return mixed null, if field does not exist; false if it is custom; true if it is system.
+     * @throws waException
      */
     public function isFieldSystem($field)
     {
@@ -338,6 +358,7 @@ class webasystFieldConstructor
     /**
      * @param string|waContactField $field
      * @param mixed $types array('person', 'company'), array('person'), array('company'), 'all' (true), empty(false, null)
+     * @throws waException
      */
     public function enableField($field, $types)
     {
@@ -366,6 +387,8 @@ class webasystFieldConstructor
         }
 
         $types = array_unique($types);
+
+        $was_enabled_for_contact = (bool)waContactFields::get($field->getId(), 'enabled');
 
         $enable = 0;
         foreach (array('person', 'company') as $type) {
@@ -400,11 +423,20 @@ class webasystFieldConstructor
                 }
             }
         }
+
+        // IF was not enable for contact and now is - move field in his OLD place
+        if (!$was_enabled_for_contact && $enable > 0) {
+            $all_fields_order = $this->getAllFieldsOrder();
+            $fields_order = array_diff($all_fields_order, self::$person_main_fields, self::$company_main_fields);
+            $this->saveFieldsOrder($fields_order);
+        }
+
     }
 
     /**
      * @param $field_id
      * @return waContactField|waContactCompositeField|null
+     * @throws waException
      */
     public function getField($field_id)
     {
@@ -420,12 +452,22 @@ class webasystFieldConstructor
     {
         $fields = $this->getAllFields();
         if (isset($fields['main'][$field_id])) {
-            return $fields['main'][$field_id];
+            $info = $fields['main'][$field_id];
+        } elseif (isset($fields['other'][$field_id])) {
+            $info = $fields['other'][$field_id];
+        } else {
+            $info = null;
         }
-        if (isset($fields['other'][$field_id])) {
-            return $fields['other'][$field_id];
+        if ($info && $field_id === 'address') {
+            $info['original_sub_field_ids'] = array(
+                'street',
+                'city',
+                'region',
+                'zip',
+                'country'
+            );
         }
-        return null;
+        return $info;
     }
 
     public function getAllFields()
@@ -663,26 +705,8 @@ class webasystFieldConstructor
                 }
             }
 
-            // enable main fields + set order
-            $sort = 0;
-            foreach ($main_fields as $id) {
-                $field = waContactFields::get($id, 'all');
-                if ($field) {
-                    waContactFields::updateField($field);
-                    waContactFields::enableField($field, $type, $sort);
-                    $sort += 1;
-                }
-            }
-
-            // enable other fields + set order
-            foreach ($fields as $id) {
-                $field = waContactFields::get($id, 'all');
-                if ($field) {
-                    waContactFields::updateField($field);
-                    waContactFields::enableField($field, $type, $sort);
-                    $sort += 1;
-                }
-            }
+            $new_order = array_merge($main_fields, $fields);
+            waContactFields::sortFields($new_order, $type);
         }
     }
 

@@ -9,11 +9,18 @@ var ContentRouter = ( function($) {
 
         // VARS
         that.app_url = options["app_url"];
+        that.base_href = (options["base_href"] || null);
         that.api_enabled = !!(window.history && window.history.pushState);
 
         // DYNAMIC VARS
         that.xhr = false;
         that.is_enabled = true;
+
+        // predicate that says ignore routing by this router - for example if we want turn of whole design redactor section be handled by this router
+        that.ignore = options.ignore;
+        if (typeof that.ignore !== "function") {
+            delete that.ignore
+        }
 
         // INIT
         that.initClass();
@@ -21,8 +28,28 @@ var ContentRouter = ( function($) {
 
     ContentRouter.prototype.initClass = function() {
         var that = this;
+
+        //
+        that.setupBaseHref();
         //
         that.bindEvents();
+    };
+
+    ContentRouter.prototype.setupBaseHref = function() {
+        var that = this;
+
+        if (!that.base_href) {
+            return false;
+        }
+
+        var $base = $('base');
+        if (!$base.length) {
+            var base = document.createElement("base");
+            document.getElementsByTagName("head")[0].appendChild(base);
+            $base = $(base);
+        }
+
+        $base.attr("href", that.base_href);
     };
 
     ContentRouter.prototype.bindEvents = function() {
@@ -32,6 +59,12 @@ var ContentRouter = ( function($) {
         var full_app_url = window.location.origin + that.app_url;
 
         $(document).on("click", "a", function(event) {
+
+            // ignore routing
+            if (that.ignore && that.ignore()) {
+                return;
+            }
+
             var $link = $(this),
                 href = $link.attr("href");
 
@@ -56,12 +89,20 @@ var ContentRouter = ( function($) {
 
         // Click on header app icon
         $("#wa-header").on("click", "a", function(event) {
+            // ignore routing
+            if (that.ignore && that.ignore()) {
+                return;
+            }
             event.stopPropagation();
         });
 
         // Click on header app icon
         if (that.api_enabled) {
             window.onpopstate = function(event) {
+                // ignore routing
+                if (that.ignore && that.ignore()) {
+                    return;
+                }
                 event.stopPropagation();
                 that.onPopState(event);
             };

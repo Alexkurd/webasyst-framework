@@ -21,7 +21,7 @@ abstract class webasystCreateCliController extends waCliController
                 try {
                     $this->initPath();
                     $config = $this->create($params);
-                    print $this->showReport($config)."\n";
+                    print $this->showReport($config, $params)."\n";
                 } catch (waException $ex) {
                     print sprintf("ERROR:\n%s\n\n", $ex->getMessage());
                     $this->showHelp();
@@ -34,7 +34,7 @@ abstract class webasystCreateCliController extends waCliController
     {
         echo <<<HELP
 
-Hint: use wa-config/developer.php to setup common defaults e.g. vendor, version
+Hint: use wa-config/developer.php to set up common defaults; e.g. vendor, version
 
 HELP;
 
@@ -81,7 +81,7 @@ HELP;
 
     abstract protected function create($params = array());
 
-    abstract protected function showReport($config = array());
+    abstract protected function showReport($config = array(), $params = array());
 
     protected function flushCache()
     {

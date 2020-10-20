@@ -94,7 +94,11 @@ class waNet
     /**
      * waNet constructor.
      * @param array $options key => value format
+     *      - $options['format'] - expected format of response
+     *      - $options['request_format'] - format of request data
+     *      ...
      * @param array $custom_headers key => value format
+     * @throws waException
      */
     public function __construct($options = array(), $custom_headers = array())
     {
@@ -215,19 +219,36 @@ class waNet
      */
     protected function buildRequest(&$url, &$content, &$method)
     {
-        $format = ifempty($this->options['request_format'], $this->options['format']);
-        if ($content && in_array($format, array(self::FORMAT_XML, self::FORMAT_XML), true)) {
-            $method = self::METHOD_POST;
+        if ($content && $method == self::METHOD_GET) {
+            //
+            // Unable to encode FORMAT_XML and FORMAT_JSON for METHOD_GET.
+            // Have to deal with it here.
+            //
+            $format = ifempty($this->options['request_format'], $this->options['format']);
+            if (in_array($format, array(self::FORMAT_XML), true)) {
+                // FORMAT_XML, METHOD_GET becomes FORMAT_XML, METHOD_POST
+                $method = self::METHOD_POST;
+            } else {
+                // FORMAT_JSON, METHOD_GET becomes FORMAT_RAW, METHOD_GET
+                $get = is_string($content) ? $content : http_build_query($content);
+                $url .= strpos($url, '?') ? '&' : '?'.$get;
+                $content = array();
+            }
         }
 
-        if ($content && ($method == self::METHOD_GET)) {
-            $get = is_string($content) ? $content : http_build_query($content);
-            $url .= strpos($url, '?') ? '&' : '?'.$get;
-            $content = array();
-        }
-
-        if ($post = self::getPost($url, $this->options['required_get_fields'])) {
-            $method = self::METHOD_POST;
+        // When URL is too long, move some fields to POST body
+        $post = self::getPost($url, $this->options['required_get_fields']);
+        if ($post) {
+            switch ($method) {
+                // GET becomes POST
+                // PUT and POST are ok as is
+                // DELETE don't know what to do
+                case self::METHOD_GET:
+                    $method = self::METHOD_POST;
+                    break;
+                case self::METHOD_DELETE:
+                    throw new waException('Too long URL for METHOD_DELETE');
+            }
             $content = array_merge($post, $content);
         }
 
@@ -329,6 +350,8 @@ class waNet
                             $message = 'Unsupported class "%s" of content object. Expected instance of SimpleXMLElement or DOMDocument classes.';
                             throw new waException(sprintf($message, $class));
                         }
+                    } else {
+                        throw new waException('XML content must be an instance of SimpleXMLElement or DOMDocument classes.');
                     }
                     break;
                 default:
@@ -413,14 +436,21 @@ class waNet
     public function getResponseHeader($header = null)
     {
         if (!empty($header)) {
-            if (isset($this->response_header[$header])) {
+            if (array_key_exists($header, $this->response_header)) {
                 return $this->response_header[$header];
             }
-            $header = str_replace('-', '_', strtolower($header));
 
-            return ifset($this->response_header[$header]);
+            $header_alias = $header = str_replace('-', '_', $header);
+
+            foreach ($this->response_header as $field => $value) {
+                // Ignore register of headers according to RFC
+                if (strcasecmp($field, $header) === 0 || strcasecmp($header_alias, $header) === 0) {
+                    return $value;
+                }
+            }
+
+            return null;
         }
-
         return $this->response_header;
     }
 
@@ -485,7 +515,7 @@ class waNet
         return false;
     }
 
-    private function runCurl($url, $params, $method, $curl_options = array(), $callback = null)
+    protected function runCurl($url, $params, $method, $curl_options = array(), $callback = null)
     {
         $this->getCurl($url, $params, $method, $curl_options);
         if (!empty($callback) && is_callable($callback) && !empty(self::$namespace) && !empty(self::$mh[self::$namespace])) {
@@ -587,6 +617,8 @@ class waNet
             curl_multi_close(self::$mh[$namespace]);
             unset(self::$mh[$namespace]);
         }
+
+        self::$master_options = [];
     }
 
     private function getCurl($url, $content, $method, $curl_options = array())
@@ -714,11 +746,9 @@ class waNet
             }
 
             if (empty($curl_options[CURLOPT_POST]) && empty($curl_options[CURLOPT_POSTFIELDS])) {
-                if (version_compare(PHP_VERSION, '5.4', '>=') || (!ini_get('safe_mode') && !ini_get('open_basedir'))) {
-                    $curl_options[CURLOPT_FOLLOWLOCATION] = true;
-                }
-
-                if (version_compare(PHP_VERSION, '5.4', '>=') || (!ini_get('safe_mode') && !ini_get('open_basedir'))) {
+                if (!ini_get('safe_mode') && !ini_get('open_basedir')) {
+                    // This is a useful option to have, but it is disabled in paranoid environments
+                    // (which emits a warning). Also, does not apply to POST requests.
                     $curl_options[CURLOPT_FOLLOWLOCATION] = true;
                 }
             }
@@ -736,7 +766,7 @@ class waNet
         wa()->getStorage()->close();
     }
 
-    private function runStreamContext($url, $content, $method)
+    protected function runStreamContext($url, $content, $method)
     {
         $context = $this->getStreamContext($content, $method);
         $response = @file_get_contents($url, false, $context);
@@ -850,7 +880,7 @@ class waNet
      * @return bool|string
      * @throws waException
      */
-    private function runSocketContext($url, $content, $method)
+    protected function runSocketContext($url, $content, $method)
     {
         $host = parse_url($url, PHP_URL_HOST);
 
@@ -994,5 +1024,13 @@ class waNet
             'raw'              => $this->raw_response,
             'preview'          => $this->decoded_response,
         );
+    }
+
+    public function getResponseDebugInfo()
+    {
+        return [
+            'headers' => $this->response_header,
+            'body'    => $this->raw_response,
+        ];
     }
 }

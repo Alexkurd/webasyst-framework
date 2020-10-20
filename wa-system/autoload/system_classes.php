@@ -17,6 +17,7 @@ return array(
     'waAuthConfirmEmailException'       => 'auth/exceptions/waAuthConfirmEmailException.class.php',
     'waAuthConfirmPhoneException'       => 'auth/exceptions/waAuthConfirmPhoneException.class.php',
     'waAuthInvalidCredentialsException' => 'auth/exceptions/waAuthInvalidCredentialsException.class.php',
+    'waAuthRunOutOfTriesException'      => 'auth/exceptions/waAuthRunOutOfTriesException.class.php',
 
     'waAutoload'                        => 'autoload/waAutoload.class.php',
 
@@ -53,6 +54,7 @@ return array(
     'waViewAction'                      => 'controller/waViewAction.class.php',
     'waViewActions'                     => 'controller/waViewActions.class.php',
     'waViewController'                  => 'controller/waViewController.class.php',
+    'waDispatch'                        => 'controller/waDispatch.class.php',
     'waWidget'                          => 'widget/waWidget.class.php',
 
     'waCurrency'                        => 'currency/waCurrency.class.php',
@@ -67,6 +69,9 @@ return array(
     'waModelExpr'                       => 'database/waModelExpr.class.php',
     'waNestedSetModel'                  => 'database/waNestedSetModel.class.php',
     'waParamsModel'                     => 'database/waParamsModel.class.php',
+    'waSystemPluginModel'               => 'plugin/waSystemPluginModel.class.php',
+    'waSystemPluginAction'              => 'plugin/waSystemPluginAction.class.php',
+    'waSystemPluginActions'             => 'plugin/waSystemPluginActions.class.php',
 
     'waSMS'                             => 'sms/waSMS.class.php',
     'waSMSAdapter'                      => 'sms/waSMSAdapter.class.php',
@@ -92,15 +97,26 @@ return array(
     'waLocale'                          => 'locale/waLocale.class.php',
     'waLocaleAdapter'                   => 'locale/waLocaleAdapter.class.php',
 
+    'waLocaleParseEntityInterface' => 'locale/parse/entity/waLocaleParseEntity.interface.php',
+    'waLocaleParseEntity'          => 'locale/parse/entity/waLocaleParseEntity.class.php',
+    'waLocaleParseEntityWebasyst'  => 'locale/parse/entity/waLocaleParseEntityWebasyst.class.php',
+    'waLocaleParseEntityApp'       => 'locale/parse/entity/waLocaleParseEntityApp.class.php',
+    'waLocaleParseEntityPlugins'   => 'locale/parse/entity/waLocaleParseEntityPlugins.class.php',
+    'waLocaleParseEntityWidgets'   => 'locale/parse/entity/waLocaleParseEntityWidgets.class.php',
+    'waLocaleParseEntityWaPlugins' => 'locale/parse/entity/waLocaleParseEntityWaPlugins.class.php',
+    'waLocaleParseEntityWaWidgets' => 'locale/parse/entity/waLocaleParseEntityWaWidgets.class.php',
+    'waLocaleParseEntityTheme'     => 'locale/parse/entity/waLocaleParseEntityTheme.class.php',
+    'waGettextParser'              => 'locale/waGettextParser.class.php',
+
     // <LOGIN MODULE>
 
     // <classes>
 
     // login
-    'waLoginFormRenderer'               => 'login/classes/waLoginFormRenderer.class.php',
-    'waLoginForm'                       => 'login/classes/login/waLoginForm.class.php',
-    'waBackendLoginForm'                => 'login/classes/login/waBackendLoginForm.class.php',
-    'waFrontendLoginForm'               => 'login/classes/login/waFrontendLoginForm.class.php',
+    'waLoginFormRenderer'          => 'login/classes/waLoginFormRenderer.class.php',
+    'waLoginForm'                  => 'login/classes/login/waLoginForm.class.php',
+    'waBackendLoginForm'           => 'login/classes/login/waBackendLoginForm.class.php',
+    'waFrontendLoginForm'          => 'login/classes/login/waFrontendLoginForm.class.php',
 
     // forgotpassword
     'waForgotPasswordForm'              => 'login/classes/forgotpassword/waForgotPasswordForm.class.php',
@@ -200,5 +216,26 @@ return array(
     'waDesignActions'                   => 'design/actions/waDesign.actions.php',
     'waPluginsActions'                  => 'plugin/actions/waPlugins.actions.php',
 
+    'waMapAdapter'                      => 'map/waMapAdapter.class.php',
+    'waDisabledMapAdapter'              => 'map/adapters/waDisabledMapAdapter.class.php',
+
+    // <WEBASYST ID MODULE>
+
+    'waWebasystIDConfig'                       => 'waid/waWebasystIDConfig.class.php',
+    'waWebasystIDException'                    => 'waid/exceptions/waWebasystIDException.class.php',
+    'waWebasystIDAuthException'                => 'waid/exceptions/waWebasystIDAuthException.class.php',
+    'waWebasystIDAccessDeniedAuthException'    => 'waid/exceptions/waWebasystIDAccessDeniedAuthException.class.php',
+    'waWebasystIDClientManager'                => 'waid/waWebasystIDClientManager.class.php',
+    'waWebasystIDAuthAdapter'                  => 'waid/waWebasystIDAuthAdapter.class.php',
+    'waWebasystIDAuth'                         => 'waid/waWebasystIDAuth.class.php',
+    'waWebasystIDWAAuth'                       => 'waid/waWebasystIDWAAuth.class.php',
+    'waWebasystIDSiteAuth'                     => 'waid/waWebasystIDSiteAuth.class.php',
+    'waWebasystIDWAAuthController'             => 'waid/waWebasystIDWAAuthController.class.php',
+    'waWebasystIDAccessTokenManager'           => 'waid/waWebasystIDAccessTokenManager.class.php',
+    'waWebasystIDApi'                          => 'waid/waWebasystIDApi.class.php',
+    'waWebasystIDCustomerCenterAuthController' => 'waid/waWebasystIDCustomerCenterAuth.controller.php',
+    'waWebasystIDUserInviting'                 => 'waid/waWebasystIDUserInviting.class.php'
+
+    // </WEBASYST ID MODULE>
 );
 

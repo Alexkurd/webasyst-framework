@@ -63,6 +63,8 @@ class waPluginsActions extends waActions
         }
         $template = $this->getTemplatePath('settings');
         $vars['plugins_count'] = $plugins_count;
+        $vars['app_id'] = $this->getAppId();
+        $vars['need_show_review_widget'] = wa()->appExists('installer');
         $this->display($vars, $template);
 
     }
@@ -88,17 +90,8 @@ class waPluginsActions extends waActions
         $settings = (array)$this->getRequest()->post($namespace);
         try {
             $files = waRequest::file($namespace);
-            $settings_definitions = $plugin->getSettings();
             foreach ($files as $name => $file) {
-                if (true
-                    || #TODO use this check in future
-                    (isset($settings_definitions[$name])
-                        && !empty($settings_definitions[$name]['control_type'])
-                        && ($settings_definitions[$name]['control_type'] == waHtmlControl::FILE)
-                    )
-                ) {
-                    $settings[$name] = $file;
-                }
+                $settings[$name] = $file;
             }
             $response = (array)$plugin->saveSettings($settings);
             $response['message'] = _w('Saved');

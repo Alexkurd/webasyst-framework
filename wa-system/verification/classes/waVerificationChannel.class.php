@@ -9,6 +9,15 @@ abstract class waVerificationChannel
     protected $info;
     protected $options;
 
+    const VERIFY_ERROR_INVALID = 'invalid';
+    const VERIFY_ERROR_OUT_OF_TRIES = 'out_of_tries';
+
+    /**
+     * waVerificationChannel constructor.
+     * @param $channel
+     * @param array $options
+     * @throws waException
+     */
     public function __construct($channel, $options = array())
     {
         $this->options = is_array($options) ? $options : array();
@@ -28,10 +37,9 @@ abstract class waVerificationChannel
     }
 
     /**
-     * @param $channel
+     * @param waVerificationChannel|int|array|string|null $channel
      * @param array $options
      * @return waVerificationChannel
-     * @throws waException
      */
     public static function factory($channel, $options = array())
     {
@@ -49,13 +57,22 @@ abstract class waVerificationChannel
         } else {
             $type = null;
         }
+
+        $instance = null;
+
         if ($type === waVerificationChannelModel::TYPE_EMAIL) {
-            return new waVerificationChannelEmail($channel, $options);
+            try {
+                $instance = new waVerificationChannelEmail($channel, $options);
+            } catch (waException $e) {
+            }
         } elseif ($type === waVerificationChannelModel::TYPE_SMS) {
-            return new waVerificationChannelSMS($channel, $options);
-        } else {
-            return new waVerificationChannelNull();
+            try {
+                $instance = new waVerificationChannelSMS($channel, $options);
+            } catch (waException $e) {
+            }
         }
+
+        return $instance ? $instance : new waVerificationChannelNull();
     }
 
     /**
@@ -330,6 +347,7 @@ abstract class waVerificationChannel
      * Save (update or insert) date into DB
      * @param array $data array of fields of records + 'params' key for save params
      * @param bool $delete_old_params Delete old param values or not
+     * @throws waException
      */
     public function save($data, $delete_old_params = false)
     {
@@ -371,7 +389,11 @@ abstract class waVerificationChannel
         if (!is_array($params)) {
             return;
         }
-        $this->save(array('params' => $params), $delete_old_params);
+        try {
+            $this->save(array('params' => $params), $delete_old_params);
+        } catch (waException $e) {
+            //
+        }
     }
 
     /**
@@ -381,7 +403,11 @@ abstract class waVerificationChannel
     public function saveParam($key, $value)
     {
         if (is_scalar($key)) {
-            $this->save(array('params' => array($key => $value)));
+            try {
+                $this->save(array('params' => array($key => $value)));
+            } catch (waException $e) {
+
+            }
         }
     }
 
@@ -449,6 +475,16 @@ abstract class waVerificationChannel
         $this->info = null;
     }
 
+    protected function generateCode()
+    {
+        $len = 4;
+        $code = array();
+        for ($i = 0; $i < $len; $i++) {
+            $code[] = rand(0, 9);
+        }
+        return join('', $code);
+    }
+
     protected function generateOnetimePassword()
     {
         $len = 4;
@@ -489,6 +525,7 @@ abstract class waVerificationChannel
      *
      * @param array $options For feature use
      * @return bool
+     * @throws waException
      */
     public function hasSentSignUpConfirmationMessage($recipient, $options = array())
     {
@@ -509,21 +546,33 @@ abstract class waVerificationChannel
     }
 
     /**
-     * @param string $confirmation_secret
-     * @param array $options
+     * Validate signup secret (code or link) that was sent to recipient
      *
-     * @return array Associative array
+     * @param string $confirmation_secret secret to validate
+     * @param array $options associative array of options
      *
+     *   - 'recipient' If need to extra STRENGTHEN validation
+     *   - ...
+     *   - ... other concrete channel type specific options, see appropriate concrete method
+     *
+     * @return array associative array of result
      *   Format of this associative array:
      *
      *   - bool  'status'  - successful or not was validation
      *
      *   - array 'details' - detailed information about result of validation
      *      Format of details depends on 'status'
+     *
      *        If 'status' is TRUE
      *          - string 'address'     - address that was validated
      *          - int    'contact_id'  - id of contact bind to this address
-     *        Otherwise details is empty array
+     *          - ...
+     *          - ... other concrete channel type specific, see appropriate concrete method
+     *
+     *        Otherwise 'details' has keys:
+     *          - string  'error'     - string identificator of error - VERIFY_ERROR_* consts
+     *          - ...
+     *          - ... other concrete channel type specific, see appropriate concrete method
      *
      */
     abstract public function validateSignUpConfirmation($confirmation_secret, $options = array());
@@ -561,21 +610,182 @@ abstract class waVerificationChannel
     abstract public function sendOnetimePasswordMessage($recipient, $options = array());
 
     /**
-     * @param string $password
-     * @param array $options
-     *   - 'recipient' If need to extra STRENGTHEN validation
-     *   - bool 'use_session'
+     * Validate onetime password
      *
-     * @return bool|int
-     *   If 'use_session' == True - return bool
-     *   Otherwise return int > 0 OR bool (if was failure)
+     * @param string|int $password
+     * @param array $options
+     *
+     *   - 'recipient' If need to extra STRENGTHEN validation
+     *   - 'asset_id' Optional. Asset ID where is stored code. If skipped, get asset from session
+     *
+     *   - 'check_tries' Optional. Options for 'tries' logic. Format of options:
+     *       - 'count' Number of tries to validate onetime password.
+     *              Default - is NULL, not take into account number of tries
+     *              Otherwise - int
+     *                  if number of calls of this method already greater than 'tries' than this method will be failed and return 'error'
+     *      - 'clean' Delete asset after exceeding the number of tries
+     *              Default is FALSE
+     *
+     *
+     *     NOTICE: total number of tries is global for this for this asset (for this channel and recipient)
+     *
+     *
+     * @return array Associative array
+     *
+     *   Format of this associative array:
+     *
+     *   - bool  'status'  - successful or not was validation
+     *
+     *   - array 'details' - detailed information about result of validation
+     *      Format of details depends on 'status'
+     *
+     *        If 'status' is TRUE 'details' has keys:
+     *
+     *          - string 'address'     - address that was validated
+     *          - int    'contact_id'  - id of contact bind to this address
+     *          - int    'tries'       - total count of already made tries
+     *          - int    'rest_tries'  - For convenience: count of rest tries. Formula is $options['check_tries']['count'] - $result['details']['tries']
+     *
+     *        Otherwise 'details' has keys:
+     *
+     *          - string    'error'     - string identificator of error - VERIFY_ERROR_* consts
+     *          - int|null  'tries'      - total count of already made tries. Can be NULL in case if onetime password is already dead or not exist
+     *          - int       'rest_tries' - For convenience: count of rest tries. Formula is $options['check_tries']['count'] - $result['details']['tries']
+     *                                    But this value is NULL when 'tries' is NULL (in case if onetime password is already dead or not exist)
+     *
+     * @throws waException
      */
     public function validateOnetimePassword($password, $options = array())
     {
+        return $this->validateSecret($password, waVerificationChannelAssetsModel::NAME_ONETIME_PASSWORD, $options);
+    }
+
+    /**
+     * Send message with confirmation code
+     * By this code recipient can confirm that current channel (address) belongs to this recipient
+     *
+     * TODO: Maybe need take into account timeout for sending right inside of this method? I do not now yet
+     *
+     * @param $recipient
+     * @param array $options
+     * @return mixed
+     */
+    abstract public function sendConfirmationCodeMessage($recipient, $options = array());
+
+    /**
+     * @param string|int $code
+     * @param array $options
+     *
+     *   - 'recipient' If need to extra STRENGTHEN validation
+     *   - 'asset_id' Optional. Asset ID where is stored code. If skipped, get asset from session
+     *
+     *   - 'check_tries' Optional. Options for 'tries' logic. Format of options:
+     *       - 'count' Number of tries to validate code.
+     *              Default - is NULL, not take into account number of tries
+     *              Otherwise - int
+     *                  if number of calls of this method already greater than 'tries' than this method will be failed and return 'error'
+     *      - 'clean' Delete asset after exceeding the number of tries
+     *              Default is FALSE
+     *
+     *
+     *     NOTICE: total number of tries is global for this for this asset (for this channel and recipient)
+     *
+     *
+     * @return array Associative array
+     *
+     *   Format of this associative array:
+     *
+     *   - bool  'status'  - successful or not was validation
+     *
+     *   - array 'details' - detailed information about result of validation
+     *      Format of details depends on 'status'
+     *
+     *        If 'status' is TRUE 'details' has keys:
+     *
+     *          - string 'address'     - address that was validated
+     *          - int    'contact_id'  - id of contact bind to this address
+     *          - int    'tries'       - total count of already made tries
+     *          - int    'rest_tries'  - For convenience: count of rest tries. Formula is $options['check_tries']['count'] - $result['details']['tries']
+     *
+     *        Otherwise 'details' has keys:
+     *
+     *          - string    'error'     - string identificator of error - VERIFY_ERROR_* consts
+     *          - int|null 'tries'      - total count of already made tries. Can be NULL in case if code is already dead or not exist
+     *          - int      'rest_tries' - For convenience: count of rest tries. Formula is $options['check_tries']['count'] - $result['details']['tries']
+     *                                    But this value is NULL when 'tries' is NULL (in case if code is already dead or not exist)
+     *
+     * @throws waException
+     */
+    public function validateConfirmationCode($code, $options = array())
+    {
+        return $this->validateSecret($code, waVerificationChannelAssetsModel::NAME_CONFIRMATION_CODE, $options);
+    }
+
+    /**
+     * @param string|int $secret
+     * @param string $asset_name
+     * @param array $options
+     *
+     *   - 'recipient' If need to extra STRENGTHEN validation
+     *   - 'asset_id' Optional. Asset ID where is stored secret. If skipped, get asset from session
+     *
+     *   - 'check_tries' Optional. Options for 'tries' logic. Format of options:
+     *       - 'count' Number of tries to validate secret.
+     *              Default - is NULL, not take into account number of tries
+     *              Otherwise - int
+     *                  if number of calls of this method already greater than 'tries' than this method will be failed and return 'error'
+     *      - 'clean' Delete asset after exceeding the number of tries
+     *              Default is FALSE
+     *
+     *
+     *     NOTICE: total number of tries is global for this for this asset (for this channel and recipient)
+     *
+     *   - 'clean'. Optional. Clean asset (invalidate secrete) right away if validation was successful. Default is TRUE
+     *
+     *
+     * @return array Associative array
+     *
+     *   Format of this associative array:
+     *
+     *   - bool  'status'  - successful or not was validation
+     *
+     *   - array 'details' - detailed information about result of validation
+     *      Format of details depends on 'status'
+     *
+     *        If 'status' is TRUE 'details' has keys:
+     *
+     *          - string 'address'     - address that was validated
+     *          - int    'contact_id'  - id of contact bind to this address
+     *          - int    'tries'       - total count of already made tries
+     *          - int    'rest_tries'  - For convenience: count of rest tries. Formula is $options['check_tries']['count'] - $result['details']['tries']
+     *
+     *        Otherwise 'details' has keys:
+     *
+     *          - string   'error'      - string identificator of error - VERIFY_ERROR_* const
+     *          - int|null 'tries'      - total count of already made tries. Can be NULL in case if secret is already dead or not exist
+     *          - int      'rest_tries' - For convenience: count of rest tries. Formula is $options['check_tries']['count'] - $result['details']['tries']
+     *                                    But this value is NULL when 'tries' is NULL (in case if secret is already dead or not exist)
+     *
+     * @throws waException
+     */
+    protected function validateSecret($secret, $asset_name, $options = array())
+    {
+        // Initialize fail result structure
+        $fail = array(
+            'status'  => false,
+            'details' => array(
+                'tries'      => null,
+                'rest_tries' => null,
+                'error'      => self::VERIFY_ERROR_INVALID
+            )
+        );
+
         $use_session = !isset($options['asset_id']);
 
+        $session_key = null;
+
         if ($use_session) {
-            $session_key = 'wa_verification_channel_' . $this->getId() . '_asset/' . waVerificationChannelAssetsModel::NAME_ONETIME_PASSWORD;
+            $session_key = 'wa_verification_channel_' . $this->getId() . '_asset/' . $asset_name;
             $asset_id = wa()->getStorage()->get($session_key);
             $asset_id = wa_is_int($asset_id) ? (int)$asset_id : 0;
         } else {
@@ -583,14 +793,48 @@ abstract class waVerificationChannel
         }
 
         $vca = new waVerificationChannelAssetsModel();
-        $asset = $vca->getById($asset_id);
+        $asset = $vca->getAsset(array(
+            'id' => $asset_id,
+            'channel_id' => $this->getId(),
+            'name' => $asset_name
+        ));
+
         if (!$asset) {
-            return false;
+            return $fail;
         }
 
-        if ($asset['channel_id'] != $this->getId() ||
-            $asset['name'] != waVerificationChannelAssetsModel::NAME_ONETIME_PASSWORD) {
-            return false;
+        $fail['details']['tries'] = $asset['tries'];
+
+        // check tries logic
+        if (isset($options['check_tries']) && is_array($options['check_tries'])) {
+
+            // number of tries
+            $tries = isset($options['check_tries']['count']) ? $options['check_tries']['count'] : null;
+
+            // rest tries
+            if (wa_is_int($tries) && $tries > 0) {
+                $fail['details']['rest_tries'] = $tries - $asset['tries'];
+                if ($fail['details']['rest_tries'] <= 0) {
+                    $fail['details']['rest_tries'] = 0;
+                }
+            }
+
+            // if exceeding number of tries
+            if (wa_is_int($tries) && $asset['tries'] > $tries) {
+
+                // set proper error
+                $fail['details']['error'] = self::VERIFY_ERROR_OUT_OF_TRIES;
+
+                // need clean asset, so next call of this method returns VERIFY_ERROR_INVALID error
+                if (!empty($options['check_tries']['clean'])) {
+                    $vca->deleteById($asset['id']);
+                    if ($use_session) {
+                        wa()->getStorage()->del($session_key);
+                    }
+                }
+
+                return $fail;
+            }
         }
 
         $recipient = null;
@@ -598,21 +842,93 @@ abstract class waVerificationChannel
             $recipient = $this->typecastInputRecipient($options['recipient']);
         }
 
-        if ($recipient !== null && $asset['address'] !== $recipient['address']) {
-            return false;
+        $asset_contact_id = (int)$asset['contact_id'];
+
+        if ($recipient !== null) {
+
+            // check addresses
+            if (!$this->isAddressEquals($asset['address'], $recipient['address'])) {
+                return $fail;
+            }
+
+            // check contact IDs
+            if (isset($recipient['id']) && intval($recipient['id']) !== $asset_contact_id) {
+                return $fail;
+            }
         }
 
-        if (waContact::getPasswordHash($password) !== $asset['value']) {
-            return false;
+        // check secrete
+        if (!$this->isSecretEquals($secret, $asset['value'], $asset_name)) {
+            return $fail;
+        }
+
+        if (!array_key_exists('clean', $options)) {
+            $options['clean'] = true;
+        } else {
+            $options['clean'] = (bool)ifset($options['clean']);
         }
 
         // clean asset
-        $vca->deleteById($asset['id']);
-        if ($use_session) {
-            wa()->getStorage()->del($session_key);
+        if ($options['clean']) {
+            $vca->deleteById($asset['id']);
+            if ($use_session) {
+                wa()->getStorage()->del($session_key);
+            }
         }
 
-        return $asset['address'];
+        // SUCCESS
+
+        $result = array(
+            'status' => true,
+            'details' => array(
+                'tries'      => $asset['tries'],
+                'rest_tries' => null,
+                'address'    => $this->cleanAddress($asset['address']),
+                'contact_id' => $asset_contact_id
+            )
+        );
+
+        // rest tries
+        if (isset($options['check_tries']) && is_array($options['check_tries'])) {
+            $tries = isset($options['check_tries']['count']) ? $options['check_tries']['count'] : null;
+            if (wa_is_int($tries) && $tries > 0) {
+                $result['details']['rest_tries'] = $asset['tries'] - $tries;
+                if ($fail['details']['rest_tries'] <= 0) {
+                    $fail['details']['rest_tries'] = 0;
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Compare 2 addresses for equal
+     * @param $address1
+     * @param $address2
+     * @return bool
+     */
+    protected function isAddressEquals($address1, $address2)
+    {
+        return $address1 === $address2;
+    }
+
+    /**
+     * Compare 2 secret for equal
+     * @param $input_secret
+     * @param $asset_secret
+     * @param $asset_name
+     * @return bool
+     */
+    abstract protected function isSecretEquals($input_secret, $asset_secret, $asset_name);
+
+    /**
+     * @param $address
+     * @return string
+     */
+    protected function cleanAddress($address)
+    {
+        return trim($address);
     }
 
     /**
@@ -637,7 +953,24 @@ abstract class waVerificationChannel
      *
      * @see sendRecoveryPasswordMessage
      * @param string $secret
-     * @param array $options Depends on concrete implementation of method
+     * @param array $options
+     *
+     *   - 'recipient' If need to extra STRENGTHEN validation
+     *
+     *   - 'check_tries' Optional. Options for 'tries' logic. Format of options:
+     *       - 'count' Number of tries to validate code.
+     *              Default - is NULL, not take into account number of tries
+     *              Otherwise - int
+     *                  if number of calls of this method already greater than 'tries' than this method will be failed and return 'error'
+     *      - 'clean' Delete asset after exceeding the number of tries
+     *              Default is FALSE
+     *
+     *
+     *     NOTICE: total number of tries is global for this for this asset (for this channel and recipient)
+     *
+     *   - ...
+     *   - ... other concrete channel type specific options, see appropriate concrete method
+     *
      *
      * @return array Associative array
      *
@@ -647,10 +980,22 @@ abstract class waVerificationChannel
      *
      *   - array 'details' - detailed information about result of validation
      *      Format of details depends on 'status'
-     *        If 'status' is TRUE
+     *
+     *        If 'status' is TRUE 'details' has keys:
+     *
      *          - string 'address'     - address that was validated
      *          - int    'contact_id'  - id of contact bind to this address
-     *        Otherwise details is empty array
+     *          - int    'tries'       - total count of already made tries
+     *          - int    'rest_tries'  - For convenience: count of rest tries. Formula is $options['check_tries']['count'] - $result['details']['tries']
+     *
+     *        Otherwise 'details' has keys:
+     *
+     *          - string   'error'      - string identificator of error - VERIFY_ERROR_* const
+     *          - int|null 'tries'      - total count of already made tries. Can be NULL in case if code is already dead or not exist
+     *          - int      'rest_tries' - For convenience: count of rest tries. Formula is $options['check_tries']['count'] - $result['details']['tries']
+     *                                    But this value is NULL when 'tries' is NULL (in case if code is already dead or not exist)
+     *
+     * @throws waException
      */
     abstract public function validateRecoveryPasswordSecret($secret, $options = array());
 
@@ -693,6 +1038,76 @@ abstract class waVerificationChannel
      *   + other optional fields
      */
     abstract protected function typecastInputRecipient($recipient);
+
+    abstract public function isWorking();
+
+    /**
+     * Keep track stats about sending
+     * @param bool $status
+     */
+    protected function trackSendingStats($status)
+    {
+        // For existing channel KEEP TRACK fail stats
+
+        $send_stats = $this->getSendingStats();
+
+        $send_stats['total'] += 1;
+        $send_stats['last_send_dt'] = date('Y-m-d H:i:s');
+
+        if (!$status) {
+            $send_stats['total_failed'] += 1;
+            $send_stats['last_failed']  += 1;
+            $send_stats['last_fail_dt'] = date('Y-m-d H:i:s');
+        } else {
+            $send_stats['last_failed'] = 0;
+        }
+
+        if ($this->exists()) {
+            $this->saveParam('send_stats', $send_stats);
+        } else {
+            $this->setParam('send_stats', $send_stats);
+        }
+
+    }
+
+    /**
+     * @return array
+     *  - int           'total'         total sends
+     *  - int           'total_failed'  total number of failed sends
+     *  - int           'last_failed'   number only of last failed in a row sends
+     *  - null|string   'last_send_dt'  datetime of last send
+     *  - null|string   'last_fail_dt'  datetime of last failed send
+     */
+    protected function getSendingStats()
+    {
+        $stats = array(
+            'total'        => 0,
+            'total_failed' => 0,
+            'last_failed'  => 0,
+            'last_send_dt'    => null,
+            'last_fail_dt'    => null,
+        );
+
+        $send_stats = $this->getParam('send_stats');
+        $send_stats = is_array($send_stats) ? $send_stats : array();
+
+        // merge with defaults and ensure all keys we needed
+        $send_stats = array_merge($stats, $send_stats);
+
+        // typecast each field
+        foreach ($send_stats as $key => &$value) {
+            if (!array_key_exists($key, $stats)) {
+                unset($send_stats[$key]);
+            } elseif (wa_is_int($stats[$key])){
+                $value = wa_is_int($value) && $value >= 0 ? $value : 0;
+            } else {
+                $value = is_scalar($value) ? $value : null;
+            }
+        }
+        unset($value);
+
+        return $send_stats;
+    }
 
     /**
      * Render template
@@ -810,7 +1225,37 @@ abstract class waVerificationChannel
 
             // Template of message that has onetime password for logging in
             'onetime_password'  => _ws('One-time password'),
+
+            // Template of message that has confirmation code to confirm channel
+            'confirmation_code' => _ws('Confirmation code')
         );
         return $templates_list;
+    }
+
+    /**
+     * Get vars name for each predefined template, optionally with description
+     * @param string $template_name
+     * @param bool $with_description
+     * @return array
+     */
+    abstract public function getTemplateVars($template_name, $with_description = false);
+
+    /**
+     * Get string represent diagnostic info about channel
+     * @param bool $verbose - if verbose add sending stats info
+     * @return string
+     */
+    public function getDiagnostic($verbose = true)
+    {
+        // IMPORTANT:
+        // @var_export - @ just in case if var_export trigger warning or notice
+        // For example "var_export does not handle circular references"
+
+        $msg = "Channel diagnostic:\nType: %s\nInfo: %s";
+        $msg = sprintf($msg, get_class($this), @var_export($this->getInfo(false), true));
+        if ($verbose) {
+            $msg .= sprintf("\nStats:%s", @var_export($this->getSendingStats(), true));
+        }
+        return $msg;
     }
 }

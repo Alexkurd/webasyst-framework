@@ -9,6 +9,7 @@
  * @property string $storage_days
  * @property string $additional
  * @property string service
+ * @property array payment_type
  *
  * //Weight
  * @property string $weight_unit
@@ -34,6 +35,7 @@
  * @property string $address
  * @property string $country
  * @property string $region
+ * @property string $city
  * @property string $way
  *
  * //Time
@@ -52,11 +54,12 @@ class sdShipping extends waShipping
     protected $days = array();
     protected $est_delivery = null;
 
+    /**
+     * @return array|string
+     * @throws waException
+     */
     protected function calculate()
     {
-        if (!$this->isValidAddress()) {
-            return $this->_w('Pickup is not available for this address.');
-        }
         if (!$this->isValidWeight()) {
             return $this->_w('Weight values above the limit.');
         }
@@ -89,6 +92,7 @@ class sdShipping extends waShipping
                         'additional'  => $this->additional,
                         'description' => $this->address,
                         'storage'     => $this->getStorageInfo(),
+                        'payment'     => $this->getPayment(),
                     )
                 ),
             )
@@ -114,84 +118,43 @@ class sdShipping extends waShipping
 
     public function allowedAddress()
     {
-        $data = array();
+        $address = array();
         $country = $this->country;
         $region = $this->region;
+        $city = $this->getCity();
 
         if ($country) {
-            $data['country'] = array($country);
+            $address['country'] = $country;
         }
 
         if ($region) {
-            $data['region'] = array($region);
+            $address['region'] = $region;
         }
 
-        return $data;
+        if ($city) {
+            $address['city'] = count($city) == 1 ? $city[0] : $city;
+        }
+
+        return array($address);
     }
 
     public function requestedAddressFields()
     {
-        return array('country' => array('cost' => true,));
-    }
+        $value = array('cost' => true, 'required' => true);
 
-    /**
-     * Check whether the address is served
-     * @return bool
-     */
-    protected function isValidAddress()
-    {
-        if ($this->isValidCountry() && $this->isValidRegion() && $this->isValidCity()) {
-            return true;
-        } else {
-            return false;
+        $fields = array(
+            'country' => $value
+        );
+
+        if ($this->region) {
+            $fields['region'] = $value;
         }
-    }
 
-    /**
-     * Check that the country exists
-     * @return bool
-     */
-    protected function isValidCountry()
-    {
-        $requested_country = $this->getAddress('country');
-
-        if ($this->country === $requested_country) {
-            return true;
-        } else {
-            return false;
+        if ($this->getCity()) {
+            $fields['city'] = $value;
         }
-    }
 
-    /**
-     * Check that the region is required and exists
-     * @return bool
-     */
-    protected function isValidRegion()
-    {
-        $saved_region = mb_strtolower($this->region);
-        $requested_region = mb_strtolower($this->getAddress('region'));
-
-        if (empty($saved_region) || $saved_region === $requested_region) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    /**
-     * Check that the city is required and exists
-     * @return bool
-     */
-    protected function isValidCity()
-    {
-        $saved_city = $this->getCity();
-        $requested_city = mb_strtolower($this->getAddress('city'));
-
-        if (empty($saved_city) || in_array($requested_city, $saved_city)) {
-            return true;
-        } else {
-            return false;
-        }
+        return $fields;
     }
 
     /**
@@ -629,43 +592,35 @@ class sdShipping extends waShipping
 
             switch ($type) {
                 case 'extra_workday':
-                    {
-                        $extra_workday = $this->days['workdays'][$date];
-                        $day_info = array(
-                            'type'       => 'workday',
-                            'start_work' => date('Y-m-d H:i', $extra_workday['start_work']),
-                            'end_work'   => date('Y-m-d H:i', $extra_workday['end_work']),
-                            'additional' => $extra_workday['additional'],
+                    $extra_workday = $this->days['workdays'][$date];
+                    $day_info = array(
+                        'type'       => 'workday',
+                        'start_work' => date('Y-m-d H:i', $extra_workday['start_work']),
+                        'end_work'   => date('Y-m-d H:i', $extra_workday['end_work']),
+                        'additional' => $extra_workday['additional'],
 
-                        );
-                        break;
-                    }
+                    );
+                    break;
                 case 'workday':
-                    {
-                        $day_name_code = date('N', $date);
-                        $day = $this->days['weekdays'][$day_name_code];
+                    $day_name_code = date('N', $date);
+                    $day = $this->days['weekdays'][$day_name_code];
 
-                        $day_info = array(
-                            'type'       => 'workday',
-                            'start_work' => date('Y-m-d H:i', $date + $day['start_work']),
-                            'end_work'   => date('Y-m-d H:i', $date + $day['end_work']),
-                            'additional' => $day['additional'],
+                    $day_info = array(
+                        'type'       => 'workday',
+                        'start_work' => date('Y-m-d H:i', $date + $day['start_work']),
+                        'end_work'   => date('Y-m-d H:i', $date + $day['end_work']),
+                        'additional' => $day['additional'],
 
-                        );
-                        break;
-                    }
+                    );
+                    break;
                 case 'extra_weekend':
-                    {
-                        $day_info['additional'] = $this->days['weekend'][$date]['additional'];
-                        break;
-                    }
+                    $day_info['additional'] = $this->days['weekend'][$date]['additional'];
+                    break;
                 case 'weekend':
-                    {
-                        $day_name_code = date('N', $date);
+                    $day_name_code = date('N', $date);
 
-                        $day_info['additional'] = $this->days['weekdays'][$day_name_code]['additional'];
-                        break;
-                    }
+                    $day_info['additional'] = $this->days['weekdays'][$day_name_code]['additional'];
+                    break;
             }
 
             $result['weekdays'][$i] = $day_info;
@@ -716,17 +671,30 @@ class sdShipping extends waShipping
     # SETTINGS BLOCK #
     ##################
 
+    /**
+     * @param array $params
+     * @return string
+     * @throws SmartyException
+     * @throws waException
+     */
     public function getSettingsHTML($params = array())
     {
         $view = wa()->getView();
 
         $settings = $this->getSettings();
+        $countries = $this->getCountries();
+        $saved_country = ifset($settings, 'country', null);
+
+        if (!$saved_country) {
+            $saved_country = ifset($countries, 0, 'iso3letter', false);
+        }
 
         $view->assign(array(
             'obj'          => $this,
+            'payment_type' => $this->getPaymentTypeSettings(),
             'currencies'   => $this->getCurrencies(),
-            'countries'    => $this->getCountries(),
-            'regions'      => $this->getRegions($settings),
+            'countries'    => $countries,
+            'regions'      => $this->getRegions($saved_country),
             'weight_units' => $this->getWeightUnits(),
             'length_units' => $this->getAdapter()->getAvailableLinearUnits(),
             'namespace'    => waHtmlControl::makeNamespace($params),
@@ -742,6 +710,31 @@ class sdShipping extends waShipping
         return $html;
     }
 
+    /**
+     * @return array
+     */
+    public function getPaymentTypeSettings()
+    {
+        return array(
+            array(
+                'value' => self::PAYMENT_TYPE_CASH,
+                'title' => $this->_w('cash on receipt'),
+            ),
+            array(
+                'value' => self::PAYMENT_TYPE_CARD,
+                'title' => $this->_w('card on receipt'),
+            ),
+            array(
+                'value' => self::PAYMENT_TYPE_PREPAID,
+                'title' => $this->_w('prepayment'),
+            ),
+        );
+    }
+
+    /**
+     * @return array
+     * @throws waException
+     */
     protected function getCurrencies()
     {
         $app_config = wa()->getConfig();
@@ -764,15 +757,15 @@ class sdShipping extends waShipping
     protected function getCountries()
     {
         $cm = new waCountryModel();
-        $countries = $cm->all();
+        $countries = $cm->allWithFav();
 
         return $countries;
     }
 
-    protected function getRegions($settings)
+    protected function getRegions($country)
     {
         $rm = new waRegionModel();
-        $regions = $rm->getByCountry($settings['country']);
+        $regions = $rm->getByCountry($country);
 
         return $regions;
     }
@@ -824,6 +817,11 @@ class sdShipping extends waShipping
         return parent::saveSettings($saved_settings);
     }
 
+    /**
+     * @param $saved_settings
+     * @return mixed
+     * @throws waException
+     */
     protected function parseSettings($saved_settings)
     {
         $required_fields = $this->getRequiredFields();
@@ -852,6 +850,12 @@ class sdShipping extends waShipping
         return $saved_settings;
     }
 
+    /**
+     * @param $key
+     * @param $settings
+     * @return mixed|null
+     * @throws waException
+     */
     protected function parseDays($key, $settings)
     {
         $days = ifset($settings, $key, array());
@@ -884,6 +888,11 @@ class sdShipping extends waShipping
         return $days;
     }
 
+    /**
+     * @param $date
+     * @return string
+     * @throws waException
+     */
     protected function parseDayFormat($date)
     {
         $date = trim($date);
@@ -900,6 +909,11 @@ class sdShipping extends waShipping
         return $new_date;
     }
 
+    /**
+     * @param $time
+     * @return bool
+     * @throws waException
+     */
     protected function isValidateTimeFormat($time)
     {
         if ($time && !preg_match('/(^[01]?[0-9]|2[0-3])($|:([0-5][0-9]$))/ui', $time)) {
@@ -942,5 +956,28 @@ class sdShipping extends waShipping
         } else {
             return $date_time->format($format);
         }
+    }
+
+    /**
+     * Returns settings for filtering payment types
+     * @return array
+     */
+    protected function getPayment()
+    {
+        $saved_payment = $this->payment_type;
+        $result = [];
+        if (in_array(self::PAYMENT_TYPE_PREPAID, $saved_payment)) {
+            $result[self::PAYMENT_TYPE_PREPAID] = true;
+        }
+
+        if (in_array(self::PAYMENT_TYPE_CARD, $saved_payment)) {
+            $result[self::PAYMENT_TYPE_CARD] = true;
+        }
+
+        if (in_array(self::PAYMENT_TYPE_CASH, $saved_payment)) {
+            $result[self::PAYMENT_TYPE_CASH] = true;
+        }
+
+        return $result;
     }
 }

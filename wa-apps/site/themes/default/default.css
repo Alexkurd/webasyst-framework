@@ -355,6 +355,7 @@ header .auth li a:hover { color: #eea !important; }
 header .auth li a:visited { color: #777; }
 
 header .cart { display: inline-block; vertical-align: top; }
+header .cart .cart-summary { white-space: nowrap; }
 header .cart a { padding: 12px 16px 11px 13px; display: block; background: rgba(255,255,255,0.3); color: #fff; font-size: 1.5em; }
 header .cart a strong { color: #ff7; }
 header .cart a:hover { background: rgba(255,255,255,0.4) !important; }
@@ -478,6 +479,7 @@ footer a:hover { color: red !important; }
 
 .s-subscribe-section { position: relative; }
 .s-subscribe-section.is-extended .s-hidden { display: block; }
+.s-subscribe-section .s-form-desc { margin: 0.5em 0 0; font-size: 13px; line-height: 1.2em; color: #888; }
 .s-subscribe-section .s-hidden { display: none; position: absolute; top: 100%; left: 0; width: 340px; padding: 1em; background: #fff; z-index: 1; -webkit-box-shadow: 0 0 16px rgba(0,0,0,.2); box-shadow: 0 0 16px rgba(0,0,0,.15); border-radius: 3px; }
 .s-subscribe-section .s-hidden .wa-captcha { margin: 0; padding: 0; }
 .s-subscribe-section .s-hidden .wa-captcha p { margin: .5em 0 0; }
@@ -486,6 +488,9 @@ footer a:hover { color: red !important; }
 .s-subscribe-section .s-hidden .wa-captcha p > *:last-child { margin-right: 0; }
 .s-subscribe-section .s-hidden .wa-captcha p .wa-captcha-img { margin: 0; display: inline-block; }
 .s-subscribe-section .s-hidden .wa-captcha p a { display: inline; }
+
+.s-loading-section { position: fixed; top: 0; left: 0; display: flex; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(255,255,255,.5); z-index: 100; }
+.s-loading-section .s-loading-content { display: inline-block; }
 
 /* 16x16 Icons
 -------------- */

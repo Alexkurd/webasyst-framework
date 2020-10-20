@@ -4,9 +4,6 @@ class webasystSettingsTemplateSMSAction extends webasystSettingsTemplateAction
 {
     public function execute()
     {
-        if (!webasystHelper::smsTemplateAvailable()) {
-            throw new waException(_ws('Page not found'), 404);
-        }
         $channels = $this->getVerificationChannelModel()->getByType(waVerificationChannelModel::TYPE_SMS);
 
         $request_id = $this->getRequestId();
@@ -27,7 +24,22 @@ class webasystSettingsTemplateSMSAction extends webasystSettingsTemplateAction
             'channels'          => $channels,
             'numbers'           => $this->getNumbers(),
             'user'              => wa()->getUser(),
+            'sidebar_html'      => $this->getSidebarHtml()
         ));
+    }
+
+    /**
+     * @return string
+     */
+    protected function getSidebarHtml()
+    {
+        $vars = $this->view->getVars();
+        $this->view->clearAllAssign();
+        $sidebar = new webasystSettingsTemplateSMSSidebarAction();
+        $html = $sidebar->display();
+        $this->view->clearAllAssign();
+        $this->view->assign($vars);
+        return $html;
     }
 
     protected function getNumbers()

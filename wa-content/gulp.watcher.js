@@ -105,6 +105,20 @@ var config = {
             "sources": "./wa-content/css/signup/styl/*.styl",
             "target": "./wa-content/css/signup/styl/signup.styl"
         }
+    },
+    'wa-dropdown': {
+        'styl': {
+            "directory": "./wa-content/js/dropdown/",
+            "sources": "./wa-content/js/dropdown/styl/*.styl",
+            "target": "./wa-content/js/dropdown/styl/dropdown.styl"
+        }
+    },
+    'waid': {
+        'styl': {
+            "directory": "./wa-content/css/wa/waid/",
+            "sources": "./wa-content/css/wa/waid/styl/*.styl",
+            "target": "./wa-content/css/wa/waid/styl/waid.styl"
+        }
     }
 };
 

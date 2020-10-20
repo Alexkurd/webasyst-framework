@@ -50,15 +50,113 @@ abstract class waShipping extends waSystemPlugin
             $this->app_id = wa()->getApp();
         }
 
+        parent::init();
+
         if ($this->key) {
             $this->setSettings($this->getAdapter()->getSettings($this->id, $this->key));
         }
+        return $this;
     }
 
     protected function initControls()
     {
         $this->registerControl('DeliveryIntervalControl');
         parent::initControls();
+    }
+
+    public static function getClasses()
+    {
+        $plugins = self::enumerate();
+        $result = array();
+        foreach ($plugins as $id => $plugin) {
+            $result += self::getPluginClasses(self::PLUGIN_TYPE, $id);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param $params
+     * @return string
+     * @throws waException
+     * @todo доработать тексты предупреждений
+     */
+    protected function getNoticeHtml($params)
+    {
+        $html = '';
+        $info = self::info($this->id);
+        if (!empty($info['sync'])) {
+            $value = $this->getAdapter()->getAppProperties('sync');//флаг или time последнего запуска
+            $interval = max(1, intval($info['sync']));
+            $interval_str = _ws('%d hour', '%d hours', $interval);
+            $interval *= 3600;
+
+
+            $hint = array(
+                'title'       => _ws('Scheduled tasks'),
+                'value'       => '',
+                'description' => '',
+            );
+
+            if (empty($value)) {
+                $hint['value'] .= _ws('The app does not support scheduled updating of plugin data. This may slow down the plugin operation.');
+            } else {
+                $sync_time = $this->getGeneralSettings('sync_time');
+                if ($sync_time) {
+                    $sync_success_time = (int)$this->getGeneralSettings('sync_success_time');
+                    $sync_failure_time = (int)$this->getGeneralSettings('sync_failure_time');
+                    if ($sync_failure_time > $sync_success_time) {
+                        $hint['value'] .= sprintf(
+                            _ws('The data update of %s failed.'),
+                            waDateTime::format('humandatetime', $sync_failure_time)
+                        );
+
+                    } elseif ((time() - $sync_success_time) > (2 * $interval)) {
+                        $hint['value'] .= sprintf(
+                            _ws("Recommended data updating interval (%s) was disrupted."),
+                            $interval_str
+                        );
+
+                        $hint['value'] .= sprintf(
+                            _ws('Most recent data update was attempted on %s.'),
+                            waDateTime::format('humandatetime', (int)$value)
+                        );
+                    }
+                    if ($sync_success_time) {
+                        $hint['value'] .= sprintf(
+                            _ws('Most recent data update occurred on %s.'),
+                            waDateTime::format('humandatetime', $sync_success_time)
+                        );
+                    }
+
+                } else {
+                    if (($value < 2) //
+                        || ((time() - $value) > (2 * $interval))
+                    ) {
+                        $hint['value'] .= _ws('Data update was never run for this plugin. Check the server scheduler settings.');
+                    } else {
+                        $hint['value'] .= _ws('Data update was never run for this plugin.');
+                        $hint['value'] .= "\n";
+                        $hint['value'] .= sprintf(
+                            _ws('Most recent data update was attempted on %s.'),
+                            waDateTime::format('humandatetime', (int)$value)
+                        );
+                    }
+                }
+            }
+
+            $hint = array_merge($this->getSettingsDefaultParams($params), $hint);
+            $html .= waHtmlControl::getControl(waHtmlControl::HELP, 'sync', $hint);
+        }
+        return $html;
+    }
+
+    public function getSettingsHTML($params = array())
+    {
+        $html = '';
+        $html .= parent::getSettingsHTML($params);
+        $html .= $this->getNoticeHtml($params);
+        return $html;
     }
 
     /**
@@ -161,10 +259,10 @@ abstract class waShipping extends waSystemPlugin
             case 'price':
                 if (isset($this->params['total_'.$property])) {
                     $property_value = $this->params['total_'.$property];
+                    $property_value -= $this->getPackageProperty('total_discount');
                 } else {
                     foreach ($this->items as $item) {
                         $property_value += ($item['price'] - $item['discount']) * $item['quantity'];
-
                     }
                 }
                 break;
@@ -266,6 +364,24 @@ abstract class waShipping extends waSystemPlugin
         return $this->getPackageProperty('raw_price');
     }
 
+    /**
+     * Service variant id (key) returned by self::calculate method
+     * @return string|null
+     */
+    public function getSelectedServiceId()
+    {
+        return $this->getPackageProperty('service_variant_id');
+    }
+
+    /**
+     * Array of waShipping::PAYMENT_TYPE_* constants; may be empty
+     * @return string[]
+     */
+    public function getSelectedPaymentTypes()
+    {
+        return (array)$this->getPackageProperty('payment_type');
+    }
+
     protected function getAddress($field = null)
     {
         return ($field === null) ? $this->address : (isset($this->address[$field]) ? $this->address[$field] : null);
@@ -362,7 +478,7 @@ abstract class waShipping extends waSystemPlugin
     {
         $this->addItems($order->items);
         $this->setAddress($order->shipping_address);
-        $params['total_price'] = $order->total;
+        $params['total_price'] = $order->subtotal;
         $params['total_discount'] = $order->discount;
         $shipping_data = array();
         if (isset($params['shipping_data'])) {
@@ -377,6 +493,11 @@ abstract class waShipping extends waSystemPlugin
 
         $method_name = sprintf('%sPackage', $state);
         if (method_exists($this, $method_name)) {
+            /**
+             * @uses waShipping::cancelPackage
+             * @uses waShipping::readyPackage
+             * @uses waShipping::draftPackage
+             */
             return $this->{$method_name}($order, $shipping_data);
         } else {
             throw new waException(sprintf("Unknown package state %s", $state));
@@ -558,32 +679,91 @@ abstract class waShipping extends waSystemPlugin
 
     }
 
-    public function sync()
+    /**
+     * @return bool|null
+     */
+    public function runSync()
     {
+        if ($this->syncRequired()) {
+            $result = $this->sync();
+        } else {
+            $result = null;
+        }
 
+        $this->handleSync($result);
+        return $result;
+    }
+
+    /**
+     * @return null|boolean if there no data to sync just return null, otherwise return boolean
+     * @since 1.13 framework version
+     */
+    protected function sync()
+    {
+        return null;
+    }
+
+    /**
+     * @return bool|null
+     * @throws waDbException
+     */
+    protected function syncRequired()
+    {
+        $required = null;
+        $info = self::info($this->id);
+        if (!empty($info['sync'])) {
+            $sync_time = $this->getGeneralSettings('sync_time');
+            $sync_success_time = (int)$this->getGeneralSettings('sync_success_time');
+            $sync_failure_time = (int)$this->getGeneralSettings('sync_failure_time');
+            $plugin_run_sync = max(0, $sync_success_time, $sync_failure_time);
+            $required = false;
+
+            // interval value between 1 hour and 1 week
+            $interval = min(24 * 7, max(1, $info['sync'])) * 3600;
+            $time = time();
+            if (empty($sync_time) // it's first run
+                || ($time >= ($plugin_run_sync + $interval - 60)) // OR more than required time
+            ) {
+                $required = true;
+            } elseif (($time > ($plugin_run_sync + 0.25 * $interval)) // quarter interval
+                && ($sync_failure_time > $sync_success_time) // AND previous run failed
+            ) {
+                $required = true;
+            }
+        }
+
+        return $required;
+    }
+
+    protected function handleSync($result = null)
+    {
+        $time = time();
+        $update = array(
+            'sync_time' => $time,
+        );
+
+        if ($result) {
+            $update['sync_success_time'] = $time;
+        } elseif ($result !== null) {
+            $update['sync_failure_time'] = $time;
+        }
+
+        foreach ($update as $name => $value) {
+            $this->setGeneralSettings($name, $value);
+        }
+        return $result;
     }
 
 
     /**
      *
      * Returns shipment current tracking info
-     * @param $tracking_id
+     * @param string $tracking_id
      * @return string Tracking information (HTML)
      */
     public function tracking($tracking_id = null)
     {
         return null;
-    }
-
-    /**
-     *
-     * External shipping service callback handler
-     * @param array $params
-     * @param string $module_id
-     */
-    public static function execCallback($params, $module_id)
-    {
-        ;
     }
 
     public static function settingCurrencySelect()
@@ -731,7 +911,7 @@ HTML;
 HTML;
 
 
-        $_style =!empty($regions) ? ' style="display:none;"' : '';
+        $_style = !empty($regions) ? ' style="display:none;"' : '';
         $_disabled = !empty($regions) ? ' disabled="disabled"' : '';
 
         $html .= <<<HTML
@@ -861,10 +1041,11 @@ HTML;
     }
 
     /**
-     * @since installer 1.5.14
-     * @param $name
+     * @param       $name
      * @param array $params
      * @return string
+     * @throws Exception
+     * @since installer 1.5.14
      */
     public static function settingDeliveryIntervalControl($name, $params = array())
     {
@@ -882,11 +1063,11 @@ HTML;
 
         waHtmlControl::addNamespace($params, $name);
 
-        $html = '<p class="hint">'._ws('This setting must be supported by the app; e.g., Shop-Script ver. 7.2.4.114 or higher.').'</p>';
+        $html = '<p class="hint">'._ws('This setting must be supported by the app; e.g., Shop-Script ver. 8.0 or higher.').'</p>';
 
 
         $interval_params = $params;
-        $interval_params['value'] = ifset($params['value']['interval']);
+        $interval_params['value'] = ifset($params, 'value', 'interval', null);
         $interval_params['control_wrapper'] = "%2\$s\n%1\$s\n%3\$s\n";
         $interval_params['title'] = ifset($params['title_interval'], _ws('Request preferred delivery time'));
         $html .= waHtmlControl::getControl(waHtmlControl::CHECKBOX, 'interval', $interval_params);
@@ -894,24 +1075,32 @@ HTML;
         $html .= ifset($params['control_separator'], '<br/>');
 
         $date_params = $params;
-        $date_params['value'] = ifset($params['value']['date']);
+        $date_params['value'] = ifset($params, 'value', 'date', null);
         $date_params['title'] = ifset($params['title_date'], _ws('Request preferred delivery date'));
         $date_params['control_wrapper'] = "%2\$s\n%1\$s\n%3\$s\n";
         $html .= waHtmlControl::getControl(waHtmlControl::CHECKBOX, 'date', $date_params);
         waHtmlControl::makeId($date_params, 'date');
         $html .= ifset($params['control_separator'], '<br/>');
 
+        $default_interval = array(
+            'from'   => 10,
+            'from_m' => 0,
+            'to'     => 12,
+            'to_m'   => 0,
+            'day'    => array_fill(0, 6, true),
+        );
+
+        if (!empty($params['extra_workdays'])) {
+            $default_interval['day']['workday'] = true;
+        }
+
         $intervals_params = $params;
         $intervals_params['value'] = ifempty(
-            $params['value']['intervals'],
+            $params,
+            'value',
+            'intervals',
             array(
-                0 => array(
-                    'from'   => 10,
-                    'from_m' => 0,
-                    'to'     => 12,
-                    'to_m'   => 0,
-                    'day'    => array_fill(0, 6, true),
-                ),
+                0 => $default_interval,
             )
         );
 
@@ -953,21 +1142,50 @@ HTML;
                 $to .= ':'.waHtmlControl::getControl(waHtmlControl::INPUT, 'to_m', $default_params + $interval_items_params);
             }
 
-            $days = array();
             $days_params = $interval_items_params;
             waHtmlControl::addNamespace($days_params, 'day');
-            for ($day = 0; $day < 7; $day++) {
+            $days = array_fill(0, 7, array('class' => 'js-days'));
+
+            $allow_hide = true;
+
+            if (!empty($params['extra_holidays'])) {
+                $days['holiday'] = array(
+                    'class' => 'js-holiday js-days',
+                    //'style' => 'border: solid 1px #FFF4F4 !important;',
+                );
+                $allow_hide = false;
+            }
+
+            if (!empty($params['extra_workdays'])) {
+                $days['workday'] = array(
+                    'class' => 'js-workday js-days',
+                    //'style' => 'background-color: #F4FFF4 !important;',
+                );
+                $allow_hide = false;
+            }
+
+            $allow_hide = json_encode($allow_hide);
+
+            foreach ($days as $day => &$day_info) {
                 $default_params = array(
                     'value' => ifset($value['day'][$day]),
                 );
-                $days[] = waHtmlControl::getControl(waHtmlControl::CHECKBOX, $day, $default_params + $days_params);
+                $day_info['control'] = waHtmlControl::getControl(waHtmlControl::CHECKBOX, $day, $default_params + $days_params);
+                unset($day_info);
             }
-            $days = implode('</td><td class="js-days">', $days);
+
+            $day_pattern = '<td class="%s" style="%s">%s</td>';
+            foreach ($days as &$day) {
+                $day = sprintf($day_pattern, $day['class'], ifset($day['style'], ''), $day['control']);
+                unset($day);
+            }
+
+            $days = implode($days);
             $rows[] = <<<HTML
 <tr>
     <td>{$from}</td>
     <td>{$to}</td>
-    <td class="js-days">{$days}</td>
+    {$days}
     <td><a class="inline-link delete-interval" href="javascript:void(0);"><i class="icon16 delete"></i></a></td>
 
 </tr>
@@ -984,6 +1202,15 @@ HTML;
             'Sat',
             'Sun',
         );
+
+        if (!empty($params['extra_holidays'])) {
+            $days[] = 'Extra day off';
+        }
+
+        if (!empty($params['extra_workdays'])) {
+            $days[] = 'Extra workday';
+        }
+
         foreach ($days as &$day) {
             $day = _ws($day);
         }
@@ -1020,34 +1247,37 @@ HTML;
     $(function () {
         'use strict';
         var table = $('#{$params['id']}');
-        var date = $('#{$date_params['id']}');
-        var interval = $('#{$interval_params['id']}');
 
-        interval.change(function (event) {
-            var fast = !event.originalEvent;
-            if (this.checked) {
-                table.show(fast ? null : 400);
-            } else {
-                table.hide(fast ? null : 400);
-            }
-        }).change();
-
-        date.change(function (event) {
-            var fast = !event.originalEvent;
-            if (this.checked) {
-                table.find('.js-days > *').animate({'opacity': '1'}, fast ? null : 300);
-                table.find('.js-days input').attr('disabled', null);
-                if (!this.defaultChecked) {
-                    table.find('.js-days input').attr('checked', true);
+        if({$allow_hide}) {
+            var interval = $('#{$interval_params['id']}');
+            interval.change(function (event) {
+                var fast = !event.originalEvent;
+                if (this.checked) {
+                    table.show(fast ? null : 400);
+                } else {
+                    table.hide(fast ? null : 400);
                 }
-            } else {
-                table.find('.js-days > *').animate({'opacity': '0'}, fast ? null : 300);
-                table.find('.js-days input').attr('disabled', true);
-            }
-        }).change();
+            }).change();
+
+            var date = $('#{$date_params['id']}');
+            date.change(function (event) {
+                var fast = !event.originalEvent;
+                if (this.checked) {
+                    table.find('.js-days > *').animate({'opacity': '1'}, fast ? null : 300);
+                    table.find('.js-days input').attr('disabled', null);
+                    if (!this.defaultChecked) {
+                        table.find('.js-days input').attr('checked', true);
+                    }
+                } else {
+                    table.find('.js-days > *').animate({'opacity': '0'}, fast ? null : 300);
+                    table.find('.js-days input').attr('disabled', true);
+                }
+            }).change();
+        }
 
         var set = function (tr, last) {
             tr.find('input[type="checkbox"]').attr('checked', true);
+            tr.find('input[type="checkbox"][name$="day\]"]').attr('checked', null);
             var value = last ? parseInt(last.find('input[name*="[to]"]').val()) : 10;
             var delta = last ? (24 + value - parseInt(last.find('input[name*="[from]"]').val())) : 2;
             tr.find('input[name*="[from]"]').val(value % 24).trigger('change');
@@ -1069,7 +1299,7 @@ HTML;
             if (!value) {
                 value = 0;
             }
-            el.val(Math.max(1, Math.min(23, parseInt(value))));
+            el.val(Math.max(0, Math.min(23, parseInt(value))));
         });
 
         table.on('click', '.add-interval', function () {
@@ -1108,11 +1338,12 @@ HTML;
     }
 
     /**
-     * @since installer 1.5.14
-     * @deprecated use waHtmlControl::DATETIME instead
      * @param string $name
      * @param array $params
      * @return string
+     * @throws waException
+     * @since      installer 1.5.14
+     * @deprecated use waHtmlControl::DATETIME instead
      */
     public static function settingCustomDeliveryIntervalControl($name, $params = array())
     {
@@ -1331,6 +1562,7 @@ HTML;
      * @param null $key
      * @param waAppShipping|string $app_adapter
      * @return waShipping
+     * @throws waException
      */
     public static function factory($id, $key = null, $app_adapter = null)
     {
@@ -1349,7 +1581,7 @@ HTML;
 
     /**
      * The list of available shipping options
-     * @param $options array
+     * @param      $options array
      * @param null $type will be ignored
      * @return array
      */
@@ -1374,15 +1606,15 @@ HTML;
      * @return array['icon'][int]string
      * @return array['img']string
      */
-    final public static function info($id, $options = array(), $type = null)
+    public static function info($id, $options = array(), $type = null)
     {
         return parent::info($id, $options, self::PLUGIN_TYPE);
     }
 
     /**
      *
-     * @throws waException
      * @return waAppShipping
+     * @throws waException
      */
     final protected function getAdapter()
     {
@@ -1420,9 +1652,71 @@ HTML;
 
         } elseif (is_int($data)) {
             $data = date($format, $data);
-        } else {
+        } elseif ($data !== null) {
             $data = date($format, strtotime($data));
         }
         return $data;
+    }
+
+    public function uninstall($force = false)
+    {
+        $current_app_id = $this->app_id;
+        $apps = wa()->getApps();
+        foreach ($apps as $app_id => $info) {
+            if (!empty($info[$this->type])) {
+                $this->app_adapter = null;
+                $this->app_id = $app_id;
+                try {
+                    $this->getAdapter()->uninstall($this->id);
+                } catch (waException $ex) {
+                    ;
+                }
+            }
+        }
+        $this->app_adapter = null;
+        $this->app_id = $current_app_id;
+
+        parent::uninstall($force);
+    }
+
+    public function getInteractionUrl($action = 'default', $module = 'backend')
+    {
+        $url = null;
+        switch (wa()->getEnv()) {
+            case 'backend':
+                $template = 'webasyst/shipping/%s/%s/%s/?app_id=%s';
+                $url = wa()->getAppUrl('webasyst').sprintf($template, $this->id, $module, $action, $this->app_id);
+                break;
+            case 'frontend':
+                $url_params = array(
+                    'action_id' => $action,
+                    'plugin_id' => $this->key,
+                );
+                $url = wa()->getRouteUrl(sprintf('%s/frontend/shippingPlugin', $this->app_id), $url_params, true);
+                break;
+        }
+
+        return $url;
+    }
+
+    protected static function log($module_id, $data)
+    {
+        static $id;
+        if (empty($id)) {
+            $id = uniqid();
+        }
+        $rec = '#'.$id."\n";
+        $module_id = strtolower($module_id);
+        if (!preg_match('@^[a-z][a-z0-9]+$@', $module_id)) {
+            $rec .= 'Invalid module_id: '.$module_id."\n";
+            $module_id = 'general';
+        }
+        $filename = 'shipping/'.$module_id.'Shipping.log';
+        $rec .= "data:\n";
+        if (!is_string($data)) {
+            $data = var_export($data, true);
+        }
+        $rec .= "$data\n";
+        waLog::log($rec, $filename);
     }
 }

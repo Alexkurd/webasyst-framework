@@ -9,33 +9,10 @@
 abstract class waLoginForm extends waLoginFormRenderer
 {
     /**
-     * @var waAuthConfig
-     */
-    protected $auth_config;
-
-    /**
      * Which part is rendered
      * @var array
      */
     protected $is_rendered = array();
-
-    /**
-     * @param array $options that options will be passed to proper factory/constructor
-     * @see waBackendLoginForm
-     * @see waFrontendLoginForm
-     * @return waLoginForm
-     */
-    public static function factory($options = array())
-    {
-        if (waConfig::get('is_template')) {
-            return null;
-        }
-        if (wa()->getEnv() === 'backend') {
-            return new waBackendLoginForm($options);
-        } else {
-            return waFrontendLoginForm::factory($options);
-        }
-    }
 
     /**
      * Prepares assign array before form rendering
@@ -212,7 +189,10 @@ abstract class waLoginForm extends waLoginFormRenderer
                 $placeholder = $login_placeholder;
             }
         } elseif ($field_id === 'password') {
-            $placeholder = $field->getName();
+            $password_placeholder = $this->auth_config->getPasswordPlaceholder();
+            if (strlen($password_placeholder) > 0) {
+                $placeholder = $password_placeholder;
+            }
         }
         return $placeholder;
     }

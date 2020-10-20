@@ -92,7 +92,8 @@
                                             <input class="js-signup-confirm" type="checkbox" name="signup_confirm" value="1"{if $_confirm && !$no_channels} checked="checked"{/if}{if $no_channels} disabled{/if}>
                                             [`Confirm signup`]
                                         </label>
-                                        <div class="hint" style="margin-top: 6px;">[`A signup confirmation link or code will be sent in a notification.`]</div>
+                                        <div class="hint" style="margin-top: 6px;">[`A signup confirmation link or code will be sent in a notification.`]<br>
+                                            [`A registered website visitor will be able to log in only with an email address or phone number confirmed.`]</div>
                                     </div>
                                 {/if}
                             </li>
@@ -254,7 +255,7 @@
         </div>
         <h3 class="name">[`Phone`]</h3>
         <div class="s-settings-wrapper js-settings-wrapper" style="display: none;">
-            {* Email template select *}
+            {* Phone template select *}
             <div class="field-group">
                 <div class="field">
                     <div class="name">[`User notifications`]</div>
@@ -285,6 +286,28 @@
                                     [`Prefer SMS over email for sending notifications. In case of SMS sending failure, email will be sent as a replacement.`]
                                 </label>
                             </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="name">[`National direct-dialing code (NDD)`]</div>
+
+                    {$_phone_transform_prefix = $auth_config.phone_transform_prefix|default:[]}
+
+                    <div class="value">
+                        {$_input_code = $_phone_transform_prefix['input_code']|default:''}
+                        <input type="text" class="short" name="phone_transform_prefix[input_code]" value="{$_input_code}">
+                        <div class="hint" style="margin-top: 10px;">
+                            [`Enter the NDD code which is used for making calls within your country.`]<br>
+                            [`The NDD, if specified, will be replaced with the country code in website visitors’ phone numbers.`]
+                        </div>
+                    </div>
+                    <div class="name">[`Country code`]</div>
+                    <div class="value">
+                        {$_output_code = $_phone_transform_prefix['output_code']|default:''}
+                        + <input type="text" class="short" name="phone_transform_prefix[output_code]" value="{$_output_code}">
+                        <div class="hint" style="margin-top: 10px;">
+                            [`Enter your country’s phone number code to be used in website visitors’ phone numbers instead of the NDD.`]
                         </div>
                     </div>
                 </div>
@@ -449,7 +472,7 @@
                         <ul class="menu-v">
                             {foreach $login_captcha_variants as $_variant_val => $_variant_info}
                                 {$_name = $_variant_info.name}
-                                {$_is_checked = $login_captcha === $_variant_val}
+                                {$_is_checked = $auth_config.login_captcha === $_variant_val}
                                 <li>
                                     <label>
                                         <input type="radio" name="login_captcha" value="{$_variant_val}"{if $_is_checked} checked="checked"{/if}>
@@ -483,13 +506,13 @@
                         <div class="s-field-name name">
                             <span class="js-editable-wrapper" title="[`Edit field label`]">
                                 <label class="s-editable-item s-editable-text js-editable-item">
-                                    {$login_caption|escape}
+                                    {$auth_config.login_caption|escape}
                                 </label>
-                                <input type="text" class="s-editable-field-label hidden" name="login_caption" value="{$login_caption|escape}"/>
+                                <input type="text" class="s-editable-field-label hidden" name="login_caption" value="{$auth_config.login_caption|escape}"/>
                             </span>
                         </div>
                         <div class="value placeholder" title="[`Edit hint for this field`]">
-                            <input type="text" class="fill s-placeholder-input" name="login_placeholder" value="{$login_placeholder|escape}"/>
+                            <input type="text" class="fill s-placeholder-input" name="login_placeholder" value="{$auth_config.login_placeholder|escape}"/>
                         </div>
                     </div>
 
@@ -497,7 +520,7 @@
                     <div class="field">
                         <div class="s-field-name name">[s`Password`]</div>
                         <div class="value">
-                            <input class="fill s-placeholder-input" type="password" placeholder="[s`Password`]" disabled />
+                            <input class="fill s-placeholder-input" type="text" name="password_placeholder" placeholder="{$auth_config.password_placeholder|escape}" />
                         </div>
                     </div>
 
@@ -509,7 +532,7 @@
                     </div>
 
                     {* Captcha *}
-                    <div class="s-captcha-preview js-captcha-preview"{if $login_captcha !== waAuthConfig::LOGIN_CAPTCHA_ALWAYS} style="display: none;"{/if}>
+                    <div class="s-captcha-preview js-captcha-preview"{if $auth_config.login_captcha !== waAuthConfig::LOGIN_CAPTCHA_ALWAYS} style="display: none;"{/if}>
                         {if $demo_captcha->getOption('invisible')}
                             <div class="hint">[`Invisible captcha will be used`]</div>
                         {else}

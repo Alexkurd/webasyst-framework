@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE theme PUBLIC "wa-app-theme" "http://www.webasyst.com/wa-content/xml/wa-app-theme.dtd">
-<theme id="default" system="0" vendor="webasyst" author="Webasyst" app="site" version="3.3.6">
+<theme id="default" system="0" vendor="webasyst" author="Webasyst" app="site" version="3.3.22">
     <name locale="en_US">Default 3.0</name>
     <name locale="ru_RU">Дефолт 3.0</name>
     <description locale="en_US">Adaptive design theme for all base Webasyst apps</description>
@@ -86,16 +86,18 @@
         </setting>
         <setting var="pagination" control_type="select">
             <value>lazyloading</value>
-            <name locale="en_US">Long lists display</name>
-            <name locale="ru_RU">Длинные списки</name>
+            <name locale="en_US">Displaying of long product lists</name>
+            <name locale="ru_RU">Отображение длинных списков товаров</name>
+            <description locale="ru_RU">Применяется к спискам товаров в категориях и результатах поиска.</description>
+            <description locale="en_US">For category-listing pages and search results.</description>
             <options>
                 <option value="lazyloading">
-                    <name locale="ru_RU">Lazy loading: автоматическая подгрузка при скролле</name>
-                    <name locale="en_US">Lazy loading: auto load on scroll</name>
+                    <name locale="ru_RU">Автоматически загружать содержимое при прокручивании страницы</name>
+                    <name locale="en_US">Automatically load content on page scrolling</name>
                 </option>
                 <option value="paging">
-                    <name locale="ru_RU">1 2 3 4: Постраничная навигация</name>
-                    <name locale="en_US">1 2 3 4: Paginated lists</name>
+                    <name locale="ru_RU">Постраничная навигация (1 2 3 4)</name>
+                    <name locale="en_US">Paginated lists (1 2 3 4)</name>
                 </option>
             </options>
         </setting>
@@ -341,6 +343,20 @@
                 <name locale="ru_RU">Свое фоновое изображение в основном меню</name>
                 <name locale="en_US">Subheader custom image</name>
             </setting>
+        <setting var="use_shop_schedule" control_type="checkbox">
+            <value>1</value>
+            <name locale="ru_RU">Показывать график работы магазина на текущую неделю из настроек Shop-Script</name>
+            <name locale="en_US">Show online store’s working schedule for current week from Shop-Script settings</name>
+            <description locale="ru_RU">При включении игнорируется настройка «Сокращенный график работы».</description>
+            <description locale="en_US">When enabled, “Brief working schedule” setting is ignored.</description>
+        </setting>
+        <setting var="manual_schedule" control_type="text">
+            <value></value>
+            <name locale="ru_RU">Сокращенный график работы</name>
+            <name locale="en_US">Brief working schedule</name>
+            <description locale="ru_RU">Например: Пн—Сб 08:00–18:00</description>
+            <description locale="en_US">Example: Mo—Sa 08:00–18:00</description>
+        </setting>
 
 
         <setting var="divider_footer" control_type="group_divider">
@@ -369,6 +385,36 @@
                 <name locale="ru_RU">Уведомление в подвале сайта</name>
             </setting>
 
+            <setting var="divider_footer_subscription" control_type="group_divider">
+                <value>divider_footer/divider_footer_subscription</value>
+                <name locale="en_US">Subscription form</name>
+                <name locale="ru_RU">Форма подписки</name>
+                <tooltip locale="en_US">Works with installed Mailer app</tooltip>
+                <tooltip locale="ru_RU">Работает, если установлено приложение «Рассылки»</tooltip>
+            </setting>
+
+            <setting var="footer_subscribe_form_use" control_type="checkbox">
+                <value>1</value>
+                <name locale="en_US">Display form</name>
+                <name locale="ru_RU">Показывать форму</name>
+                <description locale="en_US">A subscription form is displayed only if Mailer app is installed. Subscribers are added to its common subsciber list.</description>
+                <description locale="ru_RU">Форма подписки отображается, только если установлено приложение «Рассылки». Подписчики добавляются в его общий список подписчиков.</description>
+            </setting>
+
+            <setting var="footer_subscribe_form_title" control_type="text">
+                <value locale="en_US">Subscribe</value>
+                <value locale="ru_RU">Подписаться</value>
+                <name locale="en_US">Heading</name>
+                <name locale="ru_RU">Заголовок</name>
+            </setting>
+
+            <setting var="footer_subscribe_personal_data" control_type="text">
+                <value></value>
+                <name locale="en_US">Personal data protection message</name>
+                <name locale="ru_RU">Информация об обработке персональных данных</name>
+                <description locale="en_US"><![CDATA[By submitting this form I agree to &lt;a href=&quot;---INSERT A LINK HERE!---&quot; target=&quot;_blank&quot;&gt;personal data protection policy&lt;/a&gt;]]></description>
+                <description locale="ru_RU"><![CDATA[Нажимая на кнопку подтверждения, я принимаю условия &lt;a href=&quot;---ВСТАВЬТЕ СЮДА ССЫЛКУ НА ДОКУМЕНТ!---&quot; target=&quot;_blank&quot;&gt;политики обработки персональных данных&lt;/a&gt;]]></description>
+            </setting>
 
             <setting var="divider_social_links" control_type="group_divider">
                 <value>divider_footer/divider_social_links</value>
@@ -376,30 +422,27 @@
                 <name locale="ru_RU">Ссылки на соц. сети</name>
             </setting>
                 <setting var="facebook" control_type="text">
-                    <value locale="en_US">https://www.facebook.com/Webasyst</value>
-                    <value locale="ru_RU">https://www.facebook.com/Webasyst.RU</value>
+                    <value>#</value>
                     <name locale="en_US">Facebook page URL</name>
                     <name locale="ru_RU">Адрес страницы в Фейсбуке</name>
                 </setting>
                 <setting var="twitter" control_type="text">
-                    <value locale="en_US">https://twitter.com/webasyst</value>
-                    <value locale="ru_RU">https://twitter.com/webasyst_ru</value>
+                    <value>#</value>
                     <name locale="en_US">Twitter URL</name>
                     <name locale="ru_RU">Адрес в Твиттере</name>
                 </setting>
                 <setting var="vk" control_type="text">
-                    <value locale="en_US"></value>
-                    <value locale="ru_RU">https://vk.com/webasyst_ru</value>
+                    <value>#</value>
                     <name locale="en_US">VK.com page URL</name>
                     <name locale="ru_RU">Адрес страницы или группы во Вконтакте</name>
                 </setting>
                 <setting var="instagram" control_type="text">
-                    <value>https://instagram.com/webasyst.ru</value>
+                    <value>#</value>
                     <name locale="en_US">Instagram feed URL</name>
                     <name locale="ru_RU">Адрес в Инстаграме</name>
                 </setting>
                 <setting var="youtube" control_type="text">
-                    <value>https://www.youtube.com/user/webasyst</value>
+                    <value>#</value>
                     <name locale="en_US">Youtube channel URL</name>
                     <name locale="ru_RU">Адрес канала YouTube</name>
                 </setting>
@@ -410,93 +453,21 @@
             <name locale="ru_RU">Виджеты соцсетей</name>
         </setting>
             <setting var="facebook_likebox_code" control_type="text">
-                <value locale="en_US"><![CDATA[
-    <div id="fb-root"></div>
-    <script>
-        setTimeout(function () {
-            (function (d, s, id) {
-                var js, fjs = d.getElementsByTagName(s)[0];
-                if (d.getElementById(id)) return;
-                js = d.createElement(s);
-                js.id = id;
-                js.src = 'https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v2.12&appId=157158478329004&autoLogAppEvents=1';
-                fjs.parentNode.insertBefore(js, fjs);
-            }(document, 'script', 'facebook-jssdk'));
-        }, 100)
-    </script>
-    <div class="fb-page" data-href="https://www.facebook.com/Webasyst" data-tabs="timeline" data-width="200" data-height="300" data-small-header="false"
-         data-adapt-container-width="true" data-hide-cover="false" data-show-facepile="true">
-        <blockquote cite="https://www.facebook.com/Webasyst" class="fb-xfbml-parse-ignore"><a href="https://www.facebook.com/Webasyst">Webasyst</a></blockquote>
-    </div>
-    ]]></value>
-                <value locale="ru_RU"><![CDATA[
-    <div id="fb-root"></div>
-    <script>
-        setTimeout(function () {
-            (function (d, s, id) {
-                var js, fjs = d.getElementsByTagName(s)[0];
-                if (d.getElementById(id)) return;
-                js = d.createElement(s);
-                js.id = id;
-                js.src = 'https://connect.facebook.net/ru_RU/sdk.js#xfbml=1&version=v2.12&appId=157158478329004&autoLogAppEvents=1';
-                fjs.parentNode.insertBefore(js, fjs);
-            }(document, 'script', 'facebook-jssdk'));
-        }, 100)
-    </script>
-    <div class="fb-page" data-href="https://www.facebook.com/Webasyst.RU" data-tabs="timeline" data-width="200" data-height="300" data-small-header="false"
-         data-adapt-container-width="true" data-hide-cover="false" data-show-facepile="true">
-        <blockquote cite="https://www.facebook.com/Webasyst.RU" class="fb-xfbml-parse-ignore"><a href="https://www.facebook.com/Webasyst.RU">Webasyst</a></blockquote>
-    </div>
-    ]]></value>
+                <value></value>
                 <name locale="en_US">Facebook Page Plugin code</name>
                 <name locale="ru_RU">Виджет Фейсбука</name>
                 <description locale="en_US">Embed your Facebook page badge code here. Code can be obtained on Facebook website: https://developers.facebook.com/docs/plugins/page-plugin</description>
                 <description locale="ru_RU">Поместите в это поле код виджета вашей страницы на Фейсбуке. Код можно получить в Фейсбуке на странице https://developers.facebook.com/docs/plugins/page-plugin</description>
             </setting>
             <setting var="twitter_timeline_code" control_type="text">
-                <value locale="en_US"><![CDATA[<a class="twitter-timeline" href="https://twitter.com/webasyst" data-widget-id="625947505319124993">Tweets by @webasyst</a>
-            <script>
-                setTimeout(function () {
-                    !function (d, s, id) {
-                        var js, fjs = d.getElementsByTagName(s)[0], p = /^http:/.test(d.location) ? 'http' : 'https';
-                        if (!d.getElementById(id)) {
-                            js = d.createElement(s);
-                            js.id = id;
-                            js.src = p + "://platform.twitter.com/widgets.js";
-                            fjs.parentNode.insertBefore(js, fjs);
-                        }
-                    }(document, "script", "twitter-wjs");
-
-                }, 100)
-            </script>]]></value>
-                <value locale="ru_RU"><![CDATA[<a class="twitter-timeline" href="https://twitter.com/webasyst_ru" data-widget-id="624283167772528641">Tweets by @webasyst_ru</a>
-            <script>
-                setTimeout(function () {
-                    !function (d, s, id) {
-                        var js, fjs = d.getElementsByTagName(s)[0], p = /^http:/.test(d.location) ? 'http' : 'https';
-                        if (!d.getElementById(id)) {
-                            js = d.createElement(s);
-                            js.id = id;
-                            js.src = p + "://platform.twitter.com/widgets.js";
-                            fjs.parentNode.insertBefore(js, fjs);
-                        }
-                    }(document, "script", "twitter-wjs");
-                }, 100)
-            </script>]]></value>
+                <value></value>
                 <name locale="en_US">Twitter Timeline code</name>
                 <name locale="ru_RU">Виджет Твиттера</name>
                 <description locale="en_US">Embed your Twitter Timeline code here. Code can be obtained on Twitter website: https://twitter.com/settings/widgets</description>
                 <description locale="ru_RU">Поместите в это поле код ленты Твиттера. Код можно получить на сайте Твиттера: https://twitter.com/settings/widgets</description>
             </setting>
             <setting var="vk_widget_code" control_type="text">
-                <value locale="en_US"></value>
-                <value locale="ru_RU"><![CDATA[<script type="text/javascript" src="//vk.com/js/api/openapi.js?116"></script>
-
-    <!-- VK Widget -->
-    <div id="vk_groups"></div>
-    <script type="text/javascript">
-    setTimeout(function (){ VK.Widgets.Group("vk_groups", { mode: 2, width: "{$width}", height: "{$height}" }, 21415010) }, 0);
-    </script>]]></value>
+                <value></value>
                 <name locale="en_US">VK Page Widget code</name>
                 <name locale="ru_RU">Виджет Вконтакте</name>
                 <description locale="en_US">Embed your VK community widget code here. Code can be obtained on VK website: http://vk.com/dev/Community</description>

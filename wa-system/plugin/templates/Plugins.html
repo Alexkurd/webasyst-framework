@@ -53,7 +53,7 @@
         </div>
     </div>
     <div class="content left200px blank bordered-left">
-        <div class="block double-padded" id="wa-plugins-content">
+        <div id="wa-plugins-content">
             <span>{if !empty($plugins)||!empty($installer)}[s`Loading...`]<i class="icon16 loading"></i>{/if}</span>
         </div>
         <div class="clear-both"></div>
@@ -216,6 +216,12 @@
                 success: function (data) {
                     self.xhr = null;
                     if (self.path.plugin == path.plugin) {
+
+                        // If this is not a list of plugins, add paddings
+                        if (!$plugin.is('#wa-plugins-list')) {
+                            data = $('<div/>').html('<div class="block double-padded">'+ data +'</div>').html();
+                        }
+
                         $content.html(data);
                         // update title
                         if (self.path.plugin) {
@@ -265,17 +271,35 @@
                 }
             });
         },
-
         saveHandlerAjax: function (form) {
             var self = this;
             this.message('submit');
-            var $form = $(form);
+            var $form = $(form),
+                fields_data = $form.serializeArray(),
+                form_data = new FormData();
+
+            $.each(fields_data, function () {
+                var field = $(this)[0];
+                form_data.append(field.name, field.value);
+            });
+
+            // Add files
+            var $file_controls = $form.find('input[type="file"]');
+            $file_controls.each(function (i, input) {
+                var $input = $(input);
+
+                if (input['files'].length) {
+                    form_data.append($input.attr('name'), input['files'][0]);
+                }
+            });
+
             $.ajax({
-                type: 'POST',
                 url: $form.attr('action'),
-                data: $form.serializeArray(),
-                iframe: true,
-                dataType: 'json',
+                data: form_data,
+                cache: false,
+                contentType: false,
+                processData: false,
+                type: 'POST',
                 success: function (data, textStatus, jqXHR) {
                     if (data && (data.status == 'ok')) {
                         var message = '[s`Saved`]';
@@ -403,7 +427,7 @@
 
     $.plugins.init({
         'wa_url': {json_encode($wa_url)},
-        'loading': '{"[`Loading...`]<i class=\"icon16 loading\"></i>"|escape:'javascript'}',
+        'loading': '{"<div class=\"block double-padded\">[`Loading...`] <i class=\"icon16 loading\"></i></div>"|escape:'javascript'}',
         'title_suffix': ' — {$wa->accountName(false)|escape:'javascript'}',
         'plugin_names': {json_encode($plugin_names)}
     });

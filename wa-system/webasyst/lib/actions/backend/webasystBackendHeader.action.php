@@ -51,24 +51,44 @@ class webasystBackendHeaderAction extends waViewAction
             }
         }
 
+        $push_params = array(
+            'current_app_info' => wa()->getAppInfo(),
+        );
+        $backend_push = wa()->event(array('webasyst', 'backend_push'), $push_params);
+        $include_wa_push = false;
+
+        if (!empty($backend_push) && is_array($backend_push)) {
+            foreach ($backend_push as $product_id => $value) {
+                if (!empty($value)) {
+                    $include_wa_push = true;
+                    break;
+                }
+            }
+        }
+
         $app_settings_model = new waAppSettingsModel();
 
         $this->view->assign(array(
-            'root_url'      => wa()->getRootUrl(),
-            'backend_url'   => wa()->getConfig()->getBackendUrl(true),
-            'company_name'  => htmlspecialchars($app_settings_model->get('webasyst', 'name', 'Webasyst'), ENT_QUOTES, 'utf-8'),
-            'company_url'   => $app_settings_model->get('webasyst', 'url', wa()->getRootUrl(true)),
-            'date'          => $date,
-            'user'          => $user,
-            'header_items'  => $this->getHeaderItems(),
-            'reuqest_uri'   => waRequest::server('REQUEST_URI'),
-            'current_app'   => $current_app,
-            'counts'        => $counts,
-            'wa_version'    => wa()->getVersion('webasyst'),
-            'announcements' => $announcements,
-            'header_top'    => $header_top,
-            'header_middle' => $header_middle,
-            'header_bottom' => $header_bottom,
+            'root_url'        => wa()->getRootUrl(),
+            'backend_url'     => wa()->getConfig()->getBackendUrl(true),
+            'webasyst_id_settings_url' => $this->getWebasystIDSettingsUrl(),
+            'company_name'    => htmlspecialchars($app_settings_model->get('webasyst', 'name', 'Webasyst'), ENT_QUOTES, 'utf-8'),
+            'company_url'     => $app_settings_model->get('webasyst', 'url', wa()->getRootUrl(true)),
+            'date'            => $date,
+            'user'            => $user,
+            'header_items'    => $this->getHeaderItems(),
+            'reuqest_uri'     => waRequest::server('REQUEST_URI'),
+            'current_app'     => $current_app,
+            'counts'          => $counts,
+            'wa_version'      => wa()->getVersion('webasyst'),
+            'announcements'   => $announcements,
+            'header_top'      => $header_top,
+            'header_middle'   => $header_middle,
+            'header_bottom'   => $header_bottom,
+            'include_wa_push' => $include_wa_push,
+            'webasyst_id_auth_banner' => $this->getWebasystIDAuthBanner(),
+            'show_connection_banner' => $this->showConnectionBanner(),
+            'current_domain' => wa()->getConfig()->getDomain()
         ));
 
         $this->setTemplate(wa()->getAppPath('templates/actions/backend/BackendHeader.html', 'webasyst'));
@@ -76,6 +96,8 @@ class webasystBackendHeaderAction extends waViewAction
 
     /**
      * @return array
+     * @throws waDbException
+     * @throws waException
      */
     protected function getHeaderItems()
     {
@@ -154,5 +176,65 @@ class webasystBackendHeaderAction extends waViewAction
         }
 
         return $sorted_header_items;
+    }
+
+    protected function getWebasystIDSettingsUrl()
+    {
+        return wa()->getConfig()->getBackendUrl(true) . 'webasyst/settings/waid/';
+    }
+
+    /**
+     * Is installation connected to webasyst ID
+     * @return bool
+     * @throws waDbException
+     * @throws waException
+     */
+    protected function isConnectedToWebasystID()
+    {
+        // client (installation) not connected
+        $auth = new waWebasystIDWAAuth();
+        return $auth->isClientConnected();
+    }
+
+    protected function showConnectionBanner()
+    {
+        $is_connected = $this->isConnectedToWebasystID();
+        if ($is_connected) {
+            return false;
+        }
+
+        $is_closed = wa()->getUser()->getSettings('webasyst', 'webasyst_id_announcement_close');
+        if ($is_closed) {
+            return false;
+        }
+
+        return wa()->getUser()->isAdmin('webasyst');
+    }
+
+    protected function getWebasystIDAuthBanner()
+    {
+        $is_closed = wa()->getUser()->getSettings('webasyst', 'webasyst_id_announcement_close');
+        if ($is_closed) {
+            return null;
+        }
+
+        $is_connected = $this->isConnectedToWebasystID();
+        if (!$is_connected) {
+            return null;
+        }
+
+        // user is bound with webasyst contact id already
+        $user = $this->getUser();
+        $webasyst_contact_id = $user->getWebasystContactId();
+        if ($webasyst_contact_id) {
+            return null;
+        }
+
+        $auth = new waWebasystIDWAAuth();
+        $auth_url = $auth->getUrl();
+
+        return [
+            'url' => $auth_url
+        ];
     }
 }

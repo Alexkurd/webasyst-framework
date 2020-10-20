@@ -5,6 +5,8 @@
  */
 class webasystSettingsAction extends webasystSettingsViewAction
 {
+    const STABLE_PHP_VERSION_FOR_FRAMEWORK = '5.6';
+
     public function execute()
     {
         $model = new waAppSettingsModel();
@@ -40,13 +42,34 @@ class webasystSettingsAction extends webasystSettingsViewAction
             $config = array();
         }
 
+        // PHP Version
+        $php_version = PHP_VERSION;
+        $is_good_php_version = version_compare($php_version, self::STABLE_PHP_VERSION_FOR_FRAMEWORK, '>=');
+
+
+        $image_adapter = ifset($config['image_adapter'], 'Gd');
+        $image_adapter_list = array(
+            'Gd' => array(
+                'enabled' => extension_loaded('gd'),
+                'name' => _w('GD (recommended)'),
+            ),
+            'Imagick'  => array(
+                'enabled' => extension_loaded('imagick'),
+                'name' => _w('Imagick'),
+            )
+        );
+
         $this->view->assign(array(
             'settings'             => $settings,
             'locales'              => $locales,
             'locale_adapters_list' => $locale_adapters_list,
             'locale_adapter'       => $locale_adapter,
             'config'               => $config,
-            'version'              => wa()->getVersion('webasyst'),
+            'framework_version'    => wa()->getVersion('webasyst'),
+            'php_version'          => $php_version,
+            'is_good_php_version'  => $is_good_php_version,
+            'image_adapters_list'  => $image_adapter_list,
+            'image_adapter'        => $image_adapter,
         ));
     }
 }

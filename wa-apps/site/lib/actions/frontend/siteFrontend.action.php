@@ -6,6 +6,8 @@ class siteFrontendAction extends waPageAction
     {
         $page = $this->params;
         if ($page && is_array($page)) {
+            $this->setLastModified($page);
+
             $params = waRequest::param();
             foreach ($params as $k => $v) {
                 if (in_array($k, array('url', 'module', 'action'))) {

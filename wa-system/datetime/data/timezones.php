@@ -835,7 +835,6 @@ return array(
             1 =>
                 array(
                     0 => 'Moscow',
-                    1 => 'Volgograd',
                 ),
         ),
     'Europe/Samara'              =>
@@ -844,6 +843,7 @@ return array(
             1 =>
                 array(
                     0 => 'Samara',
+                    1 => 'Volgograd',
                 ),
         ),
     'Indian/Mahe'                =>
@@ -950,6 +950,14 @@ return array(
                 array(
                     0 => 'Chagos',
                     1 => 'Cocos',
+                ),
+        ),
+    'Asia/Yangon'                =>
+        array(
+            0 => '+06', // +6:30
+            1 =>
+                array(
+                    0 => 'Yangon',
                 ),
         ),
     'Antarctica/Davis'           =>

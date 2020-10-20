@@ -19,24 +19,48 @@ class waVerificationChannelModel extends waModel
             // table not exist
             if ($e->getCode() == 1146) {
                 $this->createTables();
+                parent::__construct($type, $writable);
+            } else {
+                throw $e;
             }
+
         }
 
-        // MUST BE ALWAYS AT LEAST ONE SYSTEM EMAIL CHANNEL
-        $count = $this->countByField(array(
-            'type' => waVerificationChannelModel::TYPE_EMAIL,
-            'system' => '1'
-        ));
-        if ($count > 0) {
-            return;
+        // MUST BE ALWAYS AT LEAST ONE SYSTEM EMAIL CHANNEL, but check this condition only one time in runtime execution
+        if (!isset(self::$static_cache['system_existing_checked'])) {
+            $count = $this->countByField(array(
+                'type' => waVerificationChannelModel::TYPE_EMAIL,
+                'system' => 1
+            ));
+            if ($count > 0) {
+                return;
+            }
+            $this->createDefaultSystemEmailChannel();
+            self::$static_cache['system_existing_checked'] = true;
         }
-        $this->createDefaultSystemEmailChannel();
     }
 
+    /**
+     * Try define system email for verification channel
+     * @return array|mixed|string|null
+     * @throws waDbException
+     */
     protected function getDefaultSystemEmail()
     {
         $sm = new waAppSettingsModel();
-        return $sm->get('webasyst', 'email', '');
+
+        // Try get 'sender' email
+        $email = $sm->get('webasyst', 'sender', '');
+        $v = new waEmailValidator(array('required'=>true));
+        if ($v->isValid($email)) {
+            return $email;
+        }
+
+        $date = date('Y-m-d');
+        waLog::log("System sender email is not valid or empty. Please correct it in \"Settings\" app => \"Email settings\" => \"Sender email address\"",
+            "verification/channel/error-{$date}.log");
+
+        return '';
     }
 
     protected function createDefaultSystemEmailChannel()
@@ -54,7 +78,7 @@ class waVerificationChannelModel extends waModel
             'name' => _ws('System template'),
             'type' => self::TYPE_EMAIL,
             'address' => $email,
-            'system' => '1'
+            'system' => 1
         ));
     }
 
@@ -85,7 +109,7 @@ class waVerificationChannelModel extends waModel
             $data['create_datetime'] = date('Y-m-d H:i:s');
         }
 
-        $data['system'] = empty($data['system']) ? '0' : '1';
+        $data['system'] = empty($data['system']) ? 0 : 1;
 
         $id = $this->insert($data);
         if (!$id) {
@@ -161,7 +185,7 @@ class waVerificationChannelModel extends waModel
     {
         $query = $this->select('*')
             ->order('id')
-            ->where("type = :type AND system = '1'", array('type' => self::TYPE_EMAIL))
+            ->where("type = :type AND `system` = 1", array('type' => self::TYPE_EMAIL))
             ->limit(1);
         $result = $query->fetchAssoc();
         if (!$result) {
@@ -188,16 +212,16 @@ class waVerificationChannelModel extends waModel
         // mix-in system
         if ($is_system !== null) {
             $where[] = array(
-                'system = :system'
+                '`system` = :system'
             );
         } else {
-            $is_system = $is_system ? '1' : '0';
+            $is_system = $is_system ? 1 : 0;
         }
 
         $where = join(' AND ', $where);
 
         $query = $this->select('*')
-                      ->order('system DESC, type DESC,name,id')
+                      ->order('`system` DESC, type DESC,name,id')
                       ->where($where, array('type' => $type, 'system' => $is_system));
 
         return $query->fetchAll('id');

@@ -25,6 +25,7 @@ class waPageAction extends waViewAction
 
             $this->setThemeTemplate('error.html');
         } else {
+            $this->setLastModified($page);
 
             $breadcrumbs = array();
             $parents = array();
@@ -81,6 +82,28 @@ class waPageAction extends waViewAction
             }
             $this->view->assign('page', $page);
             $this->setThemeTemplate('page.html');
+
+            $this->addCanonicalUrl($page['full_url']);
+        }
+    }
+
+    /**
+     * @since 1.14.7
+     */
+    protected function setLastModified($page)
+    {
+        if (empty($page['update_datetime'])) {
+            return;
+        }
+
+        $has_dynamic_content = false;
+        if (empty($page['last_modified_ignore_dynamic_content'])) {
+            $has_dynamic_content = preg_match('/\{\S/', $page['content']);
+        }
+        if ($has_dynamic_content) {
+            $this->getResponse()->setLastModified(date("Y-m-d H:i:s"));
+        } else {
+            $this->getResponse()->setLastModified($page['update_datetime']);
         }
     }
 
@@ -122,5 +145,12 @@ class waPageAction extends waViewAction
             $this->model = $this->getAppId().'PageModel';
         }
         return new $this->model();
+    }
+
+    public function addCanonicalUrl($full_url)
+    {
+        $storefront_url = wa()->getRouteUrl('/frontend/', true);
+        $canonical_url = $storefront_url . $full_url;
+        $this->getResponse()->setCanonical($canonical_url);
     }
 }

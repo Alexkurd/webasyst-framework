@@ -547,8 +547,8 @@ msgstr "SMS"
 msgid "Install all updates"
 msgstr "Установить все обновления"
 
-msgid "License for this app is either expired or not valid for this domain (%s)"
-msgstr "Лицензия для этого приложения либо истекла, либо недействительна для данного домена (%s)"
+msgid "License is either expired or not valid for this installation"
+msgstr "Лицензия истекла либо недействительна для данной установки"
 
 msgid "Install update"
 msgstr "Обновить"
@@ -823,9 +823,6 @@ msgstr "Не используется"
 msgid "Get new themes from Webasyst Store"
 msgstr "Новые темы дизайна из магазина Webasyst"
 
-msgid "To get the update, you need to have separate %s app license for every individual domain the app is used on: %s"
-msgstr "Для получения обновления необходимо иметь отдельную лицензию приложения «%s» для каждого домена, на котором это приложение используется: %s"
-
 msgid "%s will be downloaded from Webasyst Store and installed for free. Once installed, you will be able either to pay for the app on a monthly basis or to buy a permanent license."
 msgstr "«%s» будет скачано и установлено бесплатно. После установки вы сможете пользоваться приложением либо оплачивая стоимость аренды ежемесячно, либо купив постоянную лицензию."
 
@@ -904,14 +901,14 @@ msgstr "Действия"
 msgid "Assets"
 msgstr "Активы"
 
-msgid "Plugin <a href=\"%s\">%s</a>"
-msgstr "Плагин «<a href=\"%s\">%s</a>»"
+msgid "Plugin <a href=\"%s\">%s</a> (id %s)"
+msgstr "Плагин «<a href=\"%s\">%s</a>» (id %s)"
 
-msgid "Theme <a href=\"%s\">%s</a>"
-msgstr "Тема дизайна «<a href=\"%s\">%s</a>»"
+msgid "Theme <a href=\"%s\">%s</a> (id %s)"
+msgstr "Тема дизайна «<a href=\"%s\">%s</a>» (id %s)"
 
-msgid "Widget <a href=\"%s\">%s</a>"
-msgstr "Виджет «<a href=\"%s\">%s</a>»"
+msgid "Widget <a href=\"%s\">%s</a> (id %s)"
+msgstr "Виджет «<a href=\"%s\">%s</a>» (id %s)"
 
 msgid "Paused"
 msgstr "Выключен"
@@ -1275,3 +1272,33 @@ msgstr "Оцените тему"
 
 msgid "Rate app"
 msgstr "Оцените приложение"
+
+msgid "My licenses"
+msgstr "Мои лицензии"
+
+msgid "System error"
+msgstr "Системная ошибка"
+
+msgid "Unknown error while trying to get licenses."
+msgstr "Неизвестная ошибка при получении лицензий."
+
+msgid "Invalid license ID"
+msgstr "Неверный идентификатор лицензии"
+
+msgid "License not found."
+msgstr "Лицензия не найдена."
+
+msgid "License binding not available."
+msgstr "Привязка лицензии недоступна."
+
+msgid "Unknown error while trying to bind the license."
+msgstr "Неизвестная ошибка при попытке привязки лицензии."
+
+msgid "Not connected with a Webasyst ID contact."
+msgstr "Нет связи с контактом Webasyst ID."
+
+msgid "Product installation is allowed only to users with admin access to Installer app."
+msgstr "Установка продуктов доступна только пользователям с административным доступом к приложению «Инсталлер»."
+
+msgid "License binding is allowed only to users with admin access to Installer app."
+msgstr "Привязка лицензий доступна только пользователям с административным доступом к приложению «Инсталлер»."
